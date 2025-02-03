@@ -1,0 +1,258 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="array_assignment_full" id="fj3AeLf;M/%o=Z5bQI`_" x="-1788" y="-855">
+    <field name="ARRAY">Nissu</field>
+    <field name="ELEMENTS">4,1,3,1,3,4,2,4,3</field>
+    <next>
+      <block type="assignment" id="a*N,l!=;Xf]}p;gi9Da`">
+        <field name="VAR">kougeihinsu</field>
+        <value name="VALUE">
+          <block type="number_literal" id="52-GC,Pu|.10CZsu2@L`">
+            <field name="NUM">9</field>
+          </block>
+        </value>
+        <next>
+          <block type="array_assignment_full" id="i}YV:8+w]];lRWmE4X!L">
+            <field name="ARRAY">Akibi</field>
+            <field name="ELEMENTS">1,1,1</field>
+            <next>
+              <block type="assignment" id="y[g^~o%lx6`B(+jG#kky">
+                <field name="VAR">buinsu</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="JK3r|.g!d:*X~Lw`z8F(">
+                    <field name="NUM">3</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="breakpoint" id="VwrPXc(GNJb9sKJC;D-F">
+                    <next>
+                      <block type="for_loop" id="YQL(v,KN9SVOiNKxUX{(">
+                        <field name="VAR">kougeihin</field>
+                        <value name="FROM">
+                          <block type="number_literal" id="wp10lCra9^?oZOr_!x7X">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <value name="TO">
+                          <block type="variable_access" id="2sjBk6%LmfA9sHP%dFOd">
+                            <field name="VAR">kougeihinsu</field>
+                          </block>
+                        </value>
+                        <value name="STEP">
+                          <block type="number_literal" id=")Qlh%;,CNZ+r;0VRag$R">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <statement name="DO">
+                          <block type="breakpoint" id="{3/SC3RM#K/C}T+?@`op">
+                            <next>
+                              <block type="assignment" id="4Cw7Fp(v9vIT2`KFm%je">
+                                <field name="VAR">tantou</field>
+                                <value name="VALUE">
+                                  <block type="number_literal" id=":@#$G=d@vSQu+9P.6n/P">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="for_loop" id="BiYq~v}K+v3m(p0ik%I%">
+                                    <field name="VAR">buin</field>
+                                    <value name="FROM">
+                                      <block type="number_literal" id="F^MoUyR]6Ic!sgj3^LR)">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                    <value name="TO">
+                                      <block type="variable_access" id="Mo%fMQzv%#Yd*A99Tvo[">
+                                        <field name="VAR">buinsu</field>
+                                      </block>
+                                    </value>
+                                    <value name="STEP">
+                                      <block type="number_literal" id="gL^dc90G8^T|[=Y8{||V">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                    <statement name="DO">
+                                      <block type="if_statement" id="mpkS7PBf}5HsmZY~Z{|3">
+                                        <value name="CONDITION">
+                                          <block type="comparison" id="i$*ST!z=y@`TpES]`Nl2">
+                                            <field name="OP">&lt;</field>
+                                            <value name="A">
+                                              <block type="array_access_1d" id="nEk]@mRQm0bqC,#%qd_)">
+                                                <field name="ARRAY">Akibi</field>
+                                                <value name="INDEX">
+                                                  <block type="variable_access" id="]MiuzTKcpo76`-lPwj5J">
+                                                    <field name="VAR">buin</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="array_access_1d" id="M0F!#:^_F8E$YJ(:{8r9">
+                                                <field name="ARRAY">Akibi</field>
+                                                <value name="INDEX">
+                                                  <block type="variable_access" id="pO)QuqHXJM4ubRi%wP$|">
+                                                    <field name="VAR">tantou</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO">
+                                          <block type="assignment" id="W7TdbDl~kDP82CIOb5%h">
+                                            <field name="VAR">tantou</field>
+                                            <value name="VALUE">
+                                              <block type="variable_access" id="aRP]xO~Yhjs5U#mioD,d">
+                                                <field name="VAR">buin</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="display" id="gq#Bw:`8?E7*~#S2USAJ">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" items="10"></mutation>
+                                        <value name="ADD0">
+                                          <block type="string_literal" id="PU))DfN`E!oo?NbW]?iN">
+                                            <field name="TEXT">工芸品</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD1">
+                                          <block type="variable_access" id="Ygm5)_.m(tp)q8hdk2Q#">
+                                            <field name="VAR">kougeihin</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD2">
+                                          <block type="string_literal" id="U_Jy^)p%n{hdYfhgZlKA">
+                                            <field name="TEXT">…</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD3">
+                                          <block type="string_literal" id=")k}xK4mg#1~3:4se]Uz+">
+                                            <field name="TEXT">部員</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD4">
+                                          <block type="variable_access" id="m$fY,ixOVZcNAbErpWUK">
+                                            <field name="VAR">tantou</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD5">
+                                          <block type="string_literal" id="qezMy1f.Q+.g.6Fd=?@t">
+                                            <field name="TEXT">：</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD6">
+                                          <block type="array_access_1d" id="r(ueP0?+,l3ttn9GLcSM">
+                                            <field name="ARRAY">Akibi</field>
+                                            <value name="INDEX">
+                                              <block type="variable_access" id="{bx0C0O%MlkjWf;QD@TY">
+                                                <field name="VAR">tantou</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="ADD7">
+                                          <block type="string_literal" id="([=|a18`##9.G$LB/|f}">
+                                            <field name="TEXT">日目～</field>
+                                          </block>
+                                        </value>
+                                        <value name="ADD8">
+                                          <block type="arithmetic" id="-:S6pxK|@9fM!O2}d{gB">
+                                            <field name="OP">+</field>
+                                            <value name="A">
+                                              <block type="array_access_1d" id="vGYb-sKyp$0nYdW,;eZW">
+                                                <field name="ARRAY">Akibi</field>
+                                                <value name="INDEX">
+                                                  <block type="variable_access" id="F(s,kH/Bkl].h3q38P)B">
+                                                    <field name="VAR">tantou</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="arithmetic" id="9b9r=o7hdIaZ}WsTo?rQ">
+                                                <field name="OP">+</field>
+                                                <value name="A">
+                                                  <block type="array_access_1d" id="!^a~A);2c=D8)dH-M]7g">
+                                                    <field name="ARRAY">Nissu</field>
+                                                    <value name="INDEX">
+                                                      <block type="variable_access" id="@-Vee|y]yUqpii{~:E6U">
+                                                        <field name="VAR">kougeihin</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="number_literal" id="Ys8#qEo;hf_:rf*qQFWX">
+                                                    <field name="NUM">-1</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="ADD9">
+                                          <block type="string_literal" id="8lq?X*7w`rHJC7xr$j#0">
+                                            <field name="TEXT">日目</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="breakpoint" id="MGW)sb0X:Z+)ZuC!76^J">
+                                            <next>
+                                              <block type="array_assignment_1d" id="?tSG?d]@@[Cl28B+3I^f">
+                                                <field name="ARRAY">Akibi</field>
+                                                <value name="INDEX">
+                                                  <block type="variable_access" id="$=Ey)HkE||SSWVDp#,bN">
+                                                    <field name="VAR">tantou</field>
+                                                  </block>
+                                                </value>
+                                                <value name="VALUE">
+                                                  <block type="arithmetic" id="HXKc,eYPOtI=DA.|+g|b">
+                                                    <field name="OP">+</field>
+                                                    <value name="A">
+                                                      <block type="array_access_1d" id="ZBS.yc`x9X`I`c;)slP2">
+                                                        <field name="ARRAY">Akibi</field>
+                                                        <value name="INDEX">
+                                                          <block type="variable_access" id="Gz2rG+KBdvWEIJt*qYwc">
+                                                            <field name="VAR">tantou</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="array_access_1d" id="NP2xMvLYUWa+p93pe~r,">
+                                                        <field name="ARRAY">Nissu</field>
+                                                        <value name="INDEX">
+                                                          <block type="variable_access" id=".%9k}M{06)F?GORn_4+R">
+                                                            <field name="VAR">kougeihin</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
