@@ -2,35 +2,6 @@
     Project Name: DNCL_Simulator
     Author: Shohei Yamazaki
     Contact: yamazaki-shohei（at）ed.pref.toyama.jp
-    License: MIT License
-
-    This project uses Blockly and JS-Interpreter, which are licensed under Apache License 2.0.
-    See https://github.com/google/blockly and https://github.com/NeilFraser/JS-Interpreter for details.
-
-    Copyright (c) 2024 Shohei Yamazaki
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-
-    The above copyright notice and this permission notice shall be included in
-    all copies or substantial portions of the Software.
-
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-    THE SOFTWARE.
-
-    --- Apache License 2.0 Notice ---
-    This project includes Blockly and JS-Interpreter, which are licensed under
-    Apache License 2.0.
-    See full license at https://www.apache.org/licenses/LICENSE-2.0
 -->
 
 <!DOCTYPE html>
@@ -189,6 +160,27 @@
                 background-color: #fff;
             }
         }
+        
+        /* 関数実行時のスタイル */
+        .function-call {
+            background-color: #e8f5ff;
+            border-left: 3px solid #4a86e8;
+            padding: 5px;
+            margin: 5px 0;
+        }
+        
+        .function-return {
+            background-color: #e6ffe6;
+            border-left: 3px solid #6aa84f;
+            padding: 5px;
+            margin: 5px 0;
+        }
+        
+        .array-element-row {
+            display: flex;
+            flex-direction: column;
+            margin-right: 5px;
+        }
     </style>
 </head>
 
@@ -262,10 +254,7 @@
             <block type="display_binary"></block>
             <block type="simple_display"></block>
         </category>
-        <category name="関数" colour="290">
-            <block type="procedures_defnoreturn"></block>
-            <block type="procedures_callnoreturn"></block>
-        </category>
+        <category name="関数" custom="PROCEDURE" colour="290"></category>
         <category name="デバッグ" colour="360">
             <block type="breakpoint"></block>
         </category>
@@ -989,10 +978,101 @@
             }
         };
 
+        //==============================================
+        // 関数のコード生成処理
+        //==============================================
+        // 戻り値ありの関数定義
+        Blockly.JavaScript['procedures_defreturn'] = function(block) {
+            // 関数名を取得
+            const funcName = block.getFieldValue('NAME');
+            
+            // 引数を取得
+            const args = [];
+            const paramNames = [];
+            for (let i = 0; i < block.arguments_.length; i++) {
+                paramNames.push(block.arguments_[i]);
+            }
+            
+            // 関数本体のコードを生成
+            let branch = Blockly.JavaScript.statementToCode(block, 'STACK');
+            
+            // 戻り値のコードを生成（存在する場合）
+            let returnValue = Blockly.JavaScript.valueToCode(block, 'RETURN', Blockly.JavaScript.ORDER_NONE) || '';
+            if (returnValue) {
+                returnValue = '  return ' + returnValue + ';\n';
+            }
+            
+            // 関数定義のコードを生成
+            const code = 'function ' + funcName + '(' + paramNames.join(', ') + ') {\n' +
+                        branch +
+                        returnValue +
+                        '}\n';
+            
+            return code;
+        };
+
+        // 戻り値のない関数定義
+        Blockly.JavaScript['procedures_defnoreturn'] = function(block) {
+            // 関数名を取得
+            const funcName = block.getFieldValue('NAME');
+            
+            // 引数を取得
+            const args = [];
+            const paramNames = [];
+            for (let i = 0; i < block.arguments_.length; i++) {
+                paramNames.push(block.arguments_[i]);
+            }
+            
+            // 関数本体のコードを生成
+            const branch = Blockly.JavaScript.statementToCode(block, 'STACK');
+            
+            // 関数定義のコードを生成
+            const code = 'function ' + funcName + '(' + paramNames.join(', ') + ') {\n' +
+                        branch +
+                        '}\n';
+            
+            return code;
+        };
+
+        // 戻り値ありの関数呼び出し
+        Blockly.JavaScript['procedures_callreturn'] = function(block) {
+            // 関数名を取得
+            const funcName = block.getFieldValue('NAME');
+            
+            // 引数を取得
+            const args = [];
+            for (let i = 0; i < block.arguments_.length; i++) {
+                args.push(Blockly.JavaScript.valueToCode(block, 'ARG' + i, Blockly.JavaScript.ORDER_NONE) || 'null');
+            }
+            
+            // 関数呼び出しのコードを生成
+            const code = funcName + '(' + args.join(', ') + ')';
+            
+            // 優先順位を考慮して返す
+            return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
+        };
+
+        // 戻り値のない関数呼び出し
+        Blockly.JavaScript['procedures_callnoreturn'] = function(block) {
+            // 関数名を取得
+            const funcName = block.getFieldValue('NAME');
+            
+            // 引数を取得
+            const args = [];
+            for (let i = 0; i < block.arguments_.length; i++) {
+                args.push(Blockly.JavaScript.valueToCode(block, 'ARG' + i, Blockly.JavaScript.ORDER_NONE) || 'null');
+            }
+            
+            // 関数呼び出しのコードを生成
+            const code = funcName + '(' + args.join(', ') + ');\n';
+            
+            return code;
+        };
+
         //右側のウインドウ幅の動的変更
         document.addEventListener('DOMContentLoaded', function () {
             const resizer = document.getElementById('resizer');
-            const rightPane = document.getElementById('mainRight'); // getElementIdをgetElementByIdに修正
+            const rightPane = document.getElementById('mainRight');
             const blocklyDiv = document.getElementById('blocklyDiv');
 
             let x = 0;
@@ -1350,6 +1430,40 @@ ${branch}}\n`;
         });
 
         //==============================================
+        // スコープ管理機能 (関数処理の強化)
+        //==============================================
+        // インタプリタの関数スコープ管理を強化
+        function enhanceInterpreterScope(interpreter) {
+            // スコープスタックを初期化
+            interpreter.scopeStack = [];
+            
+            // スコープ作成時のフック
+            const originalCreateScope = interpreter.createScope;
+            interpreter.createScope = function(node, parentScope) {
+                const newScope = originalCreateScope.call(this, node, parentScope);
+                // 新しいスコープのコンテキストを保存
+                if (node && node.type === 'FunctionDeclaration') {
+                    interpreter.scopeStack.push({
+                        name: node.id ? node.id.name : '匿名関数',
+                        scope: newScope
+                    });
+                }
+                return newScope;
+            };
+            
+            // スコープ破棄時のフック
+            const originalPopScope = interpreter.popScope;
+            interpreter.popScope = function() {
+                // スコープスタックからも取り除く
+                if (interpreter.scopeStack.length > 0 && 
+                    interpreter.scopeStack[interpreter.scopeStack.length - 1].scope === interpreter.getScope()) {
+                    interpreter.scopeStack.pop();
+                }
+                return originalPopScope.call(this);
+            };
+        }
+
+        //==============================================
         // Interpreter 初期化
         //==============================================
         function initInterpreter(interpreter, globalObject) {
@@ -1380,6 +1494,7 @@ ${branch}}\n`;
                     displayBinary(num || 0);
                 })
             );
+            
             // 配列アクセス
             interpreter.setProperty(
                 globalObject,
@@ -1388,6 +1503,7 @@ ${branch}}\n`;
                     return safeArrayAccess(arr, idx);
                 })
             );
+            
             interpreter.setProperty(
                 globalObject,
                 'safeArrayAccess2d',
@@ -1395,6 +1511,7 @@ ${branch}}\n`;
                     return safeArrayAccess2d(arr, i, j);
                 })
             );
+            
             // ブレークポイント
             interpreter.setProperty(
                 globalObject,
@@ -1405,6 +1522,7 @@ ${branch}}\n`;
                     }
                 })
             );
+            
             // nativeLog() を Interpreter 内に登録
             interpreter.setProperty(
                 globalObject,
@@ -1413,6 +1531,42 @@ ${branch}}\n`;
                     window.nativeLog(varName, interpreter.pseudoToNative(value));
                 })
             );
+            
+            // 関数の状態追跡を改善 - 関数実行時には関数名と引数をデバッグ情報に記録
+            const originalFunctionCall = interpreter.functionCall;
+            interpreter.functionCall = function(func, funcThis, args) {
+                // 関数名を取得（可能な場合）
+                let funcName = "匿名関数";
+                if (func.node && func.node.type === 'FunctionDeclaration' && func.node.id) {
+                    funcName = func.node.id.name;
+                }
+                
+                // 引数のデバッグ表示
+                if (args && args.length > 0) {
+                    const argsValues = [];
+                    for (let i = 0; i < args.length; i++) {
+                        argsValues.push(interpreter.pseudoToNative(args[i]));
+                    }
+                    // 関数呼び出し情報をログに追加（デバッグのため）
+                    const callInfo = "<div class='function-call'>関数呼び出し: " + funcName + "(" + argsValues.join(", ") + ")</div>";
+                    displayOutput(callInfo);
+                } else {
+                    const callInfo = "<div class='function-call'>関数呼び出し: " + funcName + "()</div>";
+                    displayOutput(callInfo);
+                }
+                
+                // 元の関数を呼び出す
+                const result = originalFunctionCall.call(this, func, funcThis, args);
+                
+                // 戻り値をログに追加（デバッグのため）
+                if (result !== undefined) {
+                    const returnValue = interpreter.pseudoToNative(result);
+                    const returnInfo = "<div class='function-return'>関数 " + funcName + " の戻り値: " + returnValue + "</div>";
+                    displayOutput(returnInfo);
+                }
+                
+                return result;
+            };
         }
 
         //==============================================
@@ -1532,7 +1686,8 @@ ${branch}}\n`;
         // ステップ実行 (次のブレークポイント or 終了まで)
         //==============================================
         let ignoreBreakpoints = false;
-        function runToNextBreakpoint() {
+        // オリジナルの関数を保存
+        const originalRunToNextBreakpoint = function runToNextBreakpoint() {
             // 最初のステップ時(または再実行時)は Interpreter の再生成
             if (!myInterpreter) {
                 const code = Blockly.JavaScript.workspaceToCode(workspace);
@@ -1547,6 +1702,8 @@ ${branch}}\n`;
                 try {
                     myInterpreter = new Interpreter(code, initInterpreter);
                     window.myInterpreter = myInterpreter;
+                    // 新規追加: インタプリタにスコープ管理機能を追加
+                    enhanceInterpreterScope(myInterpreter);
                 } catch (e) {
                     setRunStatus("インタプリタ生成エラー");
                     alert("インタプリタ生成エラー: " + e);
@@ -1592,12 +1749,82 @@ ${branch}}\n`;
                     }, 50);
                 }, 50);
             }
+        };
+
+        // 関数を置き換え
+        function runToNextBreakpoint() {
+            if (!myInterpreter) {
+                const code = Blockly.JavaScript.workspaceToCode(workspace);
+                document.getElementById('outputDiv').innerHTML = "";
+                document.getElementById('stateDiv').innerHTML = "";
+                setRunStatus("ステップ実行中...");
+
+                // debugVars, previousDebugVars をクリア
+                window.debugVars = {};
+                previousDebugVars = {};
+
+                try {
+                    myInterpreter = new Interpreter(code, initInterpreter);
+                    window.myInterpreter = myInterpreter;
+                    // スコープ管理機能の初期化
+                    enhanceInterpreterScope(myInterpreter);
+                } catch (e) {
+                    console.error("コード:", code);
+                    console.error("インタプリタエラー:", e);
+                    setRunStatus("インタプリタ生成エラー");
+                    alert("インタプリタ生成エラー: " + e);
+                    return;
+                }
+            }
+            
+            // 元のステップ実行関数を続ける（オーバーライドしない）
+            ignoreBreakpoints = false;
+            
+            // 実行
+            while (true) {
+                try {
+                    const ok = myInterpreter.step();
+                    if (!ok) {
+                        // 終了
+                        updateStateDisplayVisual();
+                        setRunStatus("プログラム終了");
+                        myInterpreter = null;
+                        window.myInterpreter = null;
+                        break;
+                    }
+                    if (myInterpreter.paused_) {
+                        // ブレークポイント到達
+                        myInterpreter.paused_ = false;
+                        updateStateDisplayVisual();
+                        setRunStatus("ブレークポイントに到達");
+                        break;
+                    }
+                } catch (e) {
+                    displayOutput("実行エラー: " + e);
+                    myInterpreter = null;
+                    window.myInterpreter = null;
+                    updateStateDisplayVisual();
+                    setRunStatus("エラー発生");
+                    break;
+                }
+            }
+            
+            // while ループ終了後に Blockly の再描画処理を2回実施
+            if (workspace) {
+                setTimeout(() => {
+                    Blockly.svgResize(workspace);
+                    setTimeout(() => {
+                        Blockly.svgResize(workspace);
+                    }, 50);
+                }, 50);
+            }
         }
 
         //==============================================
         // 一括実行 (ブレークポイント無視)
         //==============================================
-        function runAll() {
+        // オリジナルの関数を保存
+        const originalRunAll = function runAll() {
             const code = Blockly.JavaScript.workspaceToCode(workspace);
             document.getElementById('outputDiv').innerHTML = "";
             document.getElementById('stateDiv').innerHTML = "";
@@ -1610,6 +1837,8 @@ ${branch}}\n`;
             try {
                 myInterpreter = new Interpreter(code, initInterpreter);
                 window.myInterpreter = myInterpreter;
+                // 新規追加: インタプリタにスコープ管理機能を追加
+                enhanceInterpreterScope(myInterpreter);
             } catch (e) {
                 setRunStatus("インタプリタ生成エラー");
                 alert("インタプリタ生成エラー: " + e);
@@ -1635,6 +1864,62 @@ ${branch}}\n`;
                     break;
                 }
             }
+            // while ループ終了後に Blockly の再描画処理を2回実施
+            if (workspace) {
+                setTimeout(() => {
+                    Blockly.svgResize(workspace);
+                    setTimeout(() => {
+                        Blockly.svgResize(workspace);
+                    }, 50);
+                }, 50);
+            }
+        };
+
+        // 関数を置き換え
+        function runAll() {
+            const code = Blockly.JavaScript.workspaceToCode(workspace);
+            document.getElementById('outputDiv').innerHTML = "";
+            document.getElementById('stateDiv').innerHTML = "";
+            setRunStatus("一括実行中...");
+
+            // debugVars, previousDebugVars をクリア
+            window.debugVars = {};
+            previousDebugVars = {};
+
+            try {
+                myInterpreter = new Interpreter(code, initInterpreter);
+                window.myInterpreter = myInterpreter;
+                // スコープ管理機能の初期化
+                enhanceInterpreterScope(myInterpreter);
+            } catch (e) {
+                console.error("コード:", code);
+                console.error("インタプリタエラー:", e);
+                setRunStatus("インタプリタ生成エラー");
+                alert("インタプリタ生成エラー: " + e);
+                return;
+            }
+            
+            ignoreBreakpoints = true;
+            while (true) {
+                try {
+                    const ok = myInterpreter.step();
+                    if (!ok) {
+                        updateStateDisplayVisual();
+                        myInterpreter = null;
+                        window.myInterpreter = null;
+                        setRunStatus("プログラム終了");
+                        break;
+                    }
+                } catch (e) {
+                    displayOutput("実行エラー: " + e);
+                    myInterpreter = null;
+                    window.myInterpreter = null;
+                    updateStateDisplayVisual();
+                    setRunStatus("エラー発生");
+                    break;
+                }
+            }
+            
             // while ループ終了後に Blockly の再描画処理を2回実施
             if (workspace) {
                 setTimeout(() => {
