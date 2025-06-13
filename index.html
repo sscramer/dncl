@@ -9,108 +9,242 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL_Simulator</title>
-    <!-- Blocklyライブラリ (バージョン10.4.3) -->
+    <title>DNCL Simulator (v2.0)</title>
+    <!-- Blockly Library (v10.4.3) -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter -->
     <script src="https://unpkg.com/js-interpreter@latest"></script>
     <style>
+        :root {
+            --header-height: 50px;
+            --border-color: #ccc;
+            --background-light: #eee;
+            --background-panel: #fff;
+            --text-color: #333;
+            --button-bg: #f5f5f5;
+            --button-hover-bg: #e0e0e0;
+            --status-error-bg: #fbe9e7;
+            --status-error-color: #c62828;
+            --status-success-bg: #e8f5e9;
+            --status-success-color: #2e7d32;
+        }
+
         html,
         body {
             height: 100%;
             margin: 0;
             overflow: hidden;
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            color: var(--text-color);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
         }
 
         #header {
-            height: 50px;
-            background: #eee;
-            border-bottom: 1px solid #ccc;
+            height: var(--header-height);
+            background: var(--background-light);
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            padding: 0 10px;
+            padding: 0 15px;
             box-sizing: border-box;
+            gap: 10px;
         }
 
         #header button {
-            padding: 5px 10px;
-            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #bbb;
+            background: linear-gradient(to bottom, #fff, #e9e9e9);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+        }
+
+        #header button:hover {
+            background: linear-gradient(to bottom, #f5f5f5, #ddd);
+            border-color: #999;
+        }
+
+        #header button:active {
+            background: linear-gradient(to top, #f5f5f5, #ddd);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        #header button svg {
+            width: 16px;
+            height: 16px;
         }
 
         #header label {
-            margin-right: 10px;
+            margin: 0 10px;
             font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
         }
 
         #runStatusDiv {
-            margin-left: 10px;
+            margin-left: auto;
             font-weight: bold;
-            color: #333;
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            min-width: 60px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        #runStatusDiv.status-error {
+            background-color: var(--status-error-bg);
+            color: var(--status-error-color);
+            border-color: var(--status-error-color);
+        }
+
+        #runStatusDiv.status-success {
+            background-color: var(--status-success-bg);
+            color: var(--status-success-color);
+            border-color: var(--status-success-color);
         }
 
         #mainContainer {
             display: flex;
-            height: calc(100% - 50px);
+            height: calc(100% - var(--header-height));
             box-sizing: border-box;
         }
 
-        /* 左側 (Blockly) */
-        #mainLeft {
+        .pane {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--background-panel);
+        }
+
+        #paneLeft {
             flex: 2;
-            /* 右側より広めに */
-            height: 100%;
         }
 
-        #blocklyDiv {
-            width: 100%;
-            height: 100%;
+        #paneRight {
+            flex: 1;
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
         }
 
-        #resizer {
+        .resizer-v {
             width: 8px;
-            background: #eee;
+            background: var(--background-light);
             cursor: col-resize;
-            border-left: 1px solid #ccc;
-            border-right: 1px solid #ccc;
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            transition: background-color 0.2s;
         }
 
-        /* 右側 (出力+内部状態) */
-        #mainRight {
-            min-width: 200px;
-            /* 最小幅を設定 */
-            max-width: 50%;
-            /* 最大幅を設定 */
+        .resizer-v:hover {
+            background-color: #ddd;
+        }
+
+        .resizer-h {
+            height: 8px;
+            background: var(--background-light);
+            cursor: row-resize;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s;
+        }
+
+        .resizer-h:hover {
+            background-color: #ddd;
+        }
+
+
+        #blocklyDiv,
+        #outputDiv,
+        #stateDiv {
+            flex-grow: 1;
+            overflow: auto;
         }
 
         #outputDiv {
-            flex: 1;
-            padding: 5px;
-            font-family: monospace;
-            background: #f8f8f8;
-            overflow-y: auto;
-            border-bottom: 1px solid #ccc;
+            flex-basis: 50%;
         }
 
         #stateDiv {
-            flex: 1;
-            padding: 5px;
-            font-family: monospace;
-            background: #f0f0f0;
-            overflow-y: auto;
+            flex-basis: 50%;
         }
 
-        /* 配列表示用スタイル */
-        .var-container {
-            margin-bottom: 10px;
+        #outputDiv,
+        #stateDiv {
             padding: 10px;
+            font-family: 'Menlo', 'Monaco', monospace;
+        }
+
+        .pane-header {
+            background-color: #f0f0f0;
+            padding: 6px 12px;
+            font-weight: 600;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+            color: #555;
+        }
+
+        .var-container {
+            margin-bottom: 8px;
+            padding: 5px 8px;
             background: #fff;
-            border: 1px solid #ccc;
+            border: 1px solid #e0e0e0;
             border-radius: 4px;
         }
 
         .var-title {
             font-weight: bold;
-            margin-bottom: 5px;
+            font-size: 12px;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .array-table,
+        .array-box {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .array-table th,
+        .array-table td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: center;
+            min-width: 30px;
+            height: 30px;
+            font-size: 12px;
+        }
+
+        .array-table th {
+            background-color: #f7f7f7;
         }
 
         .array-box {
@@ -120,111 +254,206 @@
         }
 
         .array-element {
-            width: 40px;
-            height: 40px;
-            background-color: #e0e0e0;
+            width: 35px;
+            height: 35px;
+            background-color: #e9ecef;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid #bbb;
+            border: 1px solid #ced4da;
             border-radius: 3px;
             position: relative;
             font-weight: bold;
-            margin-top: 4px;
-            margin-bottom: 4px;
+            font-size: 13px;
         }
 
         .array-index {
             position: absolute;
-            top: -12px;
+            top: -14px;
             left: 0;
             right: 0;
             text-align: center;
             font-size: 10px;
-            color: #555;
-            margin-top: 2px;
-            margin-bottom: 2px;
+            color: #6c757d;
         }
 
-        /* 変更箇所を軽く光らせるアニメーション */
         .highlight {
-            animation: highlight 1s ease-out;
+            animation: highlight 1.2s ease-out;
         }
 
         @keyframes highlight {
-            0% {
-                background-color: yellow;
+
+            0%,
+            50% {
+                background-color: #fff3cd;
+                border-color: #f90;
             }
 
             100% {
-                background-color: #fff;
+                background-color: inherit;
+                border-color: inherit;
             }
         }
-        
-        /* 関数実行時のスタイル */
+
         .function-call {
             background-color: #e8f5ff;
-            border-left: 3px solid #4a86e8;
-            padding: 5px;
+            border-left: 4px solid #4a86e8;
+            padding: 5px 8px;
             margin: 5px 0;
         }
-        
+
         .function-return {
             background-color: #e6ffe6;
-            border-left: 3px solid #6aa84f;
-            padding: 5px;
+            border-left: 4px solid #6aa84f;
+            padding: 5px 8px;
             margin: 5px 0;
         }
-        
-        .array-element-row {
+
+        .error-output {
+            color: #d9534f;
+            font-weight: bold;
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 80vw;
+            max-height: 80vh;
             display: flex;
             flex-direction: column;
-            margin-right: 5px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            overflow: auto;
+        }
+
+        .modal-body#jsCodeDiv {
+            background: #2d2d2d;
+            color: #dcdcdc;
+            padding: 10px;
+            font-family: 'Menlo', 'Monaco', monospace;
+            white-space: pre-wrap;
+            border-radius: 4px;
         }
     </style>
 </head>
 
 <body>
     <div id="header">
-        <button id="runButton">実行</button>
-        <button id="stepButton">ステップ実行</button>
-        <button id="exportButton">エクスポート</button>
-        <button id="importButton">インポート</button>
-        <button id="clearButton">実行中止＆出力クリア</button>
-        <label>
-            Font Size:
-            <input type="range" id="fontSizeRange" min="12" max="36" value="16">
-        </label>
-        <!-- 1始まりモードのチェックボックス -->
-        <label>
-            1始まり(1-based index):
+        <button id="runButton" title="実行 (F9)"><svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z" />
+            </svg> 実行</button>
+        <button id="stepButton" title="ステップ実行 (F10)"><svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M15,18V6H13V18H15M11,18V6H9V18H11M7,18V6H5V18H7Z" />
+            </svg> ステップ</button>
+        <button id="resetButton" title="リセット"><svg viewBox="0 0 24 24">
+                <path fill="currentColor"
+                    d="M12,4C14.1,4 16.1,4.8 17.6,6.3C20.7,9.4 20.7,14.5 17.6,17.6C16.1,19.1 14.1,20 12,20C9.9,20 7.9,19.2 6.4,17.6C3.3,14.5 3.3,9.4 6.4,6.3C7.9,4.8 9.9,4 12,4M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" />
+            </svg> リセット</button>
+        <button id="exportButton" title="ファイルにエクスポート"><svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
+            </svg></button>
+        <button id="importButton" title="ファイルからインポート"><svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+            </svg></button>
+        <input type="file" id="importFile" accept=".xml,text/xml,.txt" style="display: none;">
+        <button id="showCodeButton">コード表示</button>
+        <label title="配列のインデックスを1から始めるか設定します">
+            1始まり(1-based):
             <input type="checkbox" id="oneBasedCheckbox">
         </label>
-        <!-- 実行状態表示用の領域 -->
-        <div id="runStatusDiv"></div>
+        <div id="runStatusDiv">待機中</div>
     </div>
 
     <div id="mainContainer">
-        <div id="mainLeft">
+        <div id="paneLeft" class="pane">
+            <div class="pane-header">ブロック</div>
             <div id="blocklyDiv"></div>
         </div>
-        <div id="resizer"></div>
-        <div id="mainRight">
+        <div id="resizerV" class="resizer-v"></div>
+        <div id="paneRight" class="pane">
+            <div class="pane-header">出力</div>
             <div id="outputDiv"></div>
+            <div id="resizerH" class="resizer-h"></div>
+            <div class="pane-header">内部状態</div>
             <div id="stateDiv"></div>
         </div>
     </div>
 
-    <!-- ツールボックス -->
+    <div id="codeModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>生成されたコード (JavaScript)</h2>
+                <button id="modalCloseButton" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="jsCodeDiv"></div>
+        </div>
+    </div>
+
+    <div id="executionFinishedModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>実行終了</h2>
+                <button id="executionFinishedModalCloseButton" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>プログラムの最後まで到達しました。</p>
+            </div>
+        </div>
+    </div>
+
+
     <xml id="toolbox" style="display: none">
-        <category name="変数・値" colour="230">
+        <category name="入出力" colour="160">
+            <block type="simple_display"></block>
+            <block type="display"></block>
+            <block type="external_input"></block>
+            <block type="display_binary"></block>
+        </category>
+        <category name="変数と値" colour="230">
             <block type="assignment"></block>
+            <block type="variable_access"></block>
+            <block type="inc_dec"></block>
             <block type="number_literal"></block>
             <block type="string_literal"></block>
-            <block type="external_input"></block>
-            <block type="variable_access"></block>
         </category>
-        <category name="配列" colour="230">
+        <category name="配列" colour="260">
             <block type="array_assignment_1d"></block>
             <block type="array_assignment_2d"></block>
             <block type="array_assignment_full"></block>
@@ -232,1719 +461,338 @@
             <block type="array_access_1d"></block>
             <block type="array_access_2d"></block>
         </category>
-        <category name="演算" colour="230">
+        <category name="計算" colour="230">
             <block type="arithmetic"></block>
-            <block type="comparison"></block>
-            <block type="logic_operation_jp"></block>
-            <block type="logic_negate_jp"></block>
             <block type="square"></block>
             <block type="power"></block>
             <block type="random"></block>
-            <block type="inc_dec"></block>
         </category>
-        <category name="制御" colour="210">
+        <category name="条件と論理" colour="210">
             <block type="if_statement"></block>
             <block type="if_else_statement"></block>
+            <block type="comparison"></block>
+            <block type="logic_operation_jp"></block>
+            <block type="logic_negate_jp"></block>
+        </category>
+        <category name="繰り返し" colour="120">
+            <block type="for_loop"></block>
             <block type="while_loop"></block>
             <block type="do_while_loop"></block>
-            <block type="for_loop"></block>
-        </category>
-        <category name="入出力" colour="160">
-            <block type="display"></block>
-            <block type="display_binary"></block>
-            <block type="simple_display"></block>
         </category>
         <category name="関数" custom="PROCEDURE" colour="290"></category>
-        <category name="デバッグ" colour="360">
+        <category name="デバッグ" colour="0">
             <block type="breakpoint"></block>
         </category>
     </xml>
 
+    <xml id="startBlocks" style="display:none"></xml>
+
     <script>
-        //==============================================
-        // 外部入力処理
-        //==============================================
-        /**
-         * ユーザーからの入力を受け付ける
-         * @param {string} msg - プロンプトに表示するメッセージ
-         * @returns {string} ユーザーが入力した値、またはキャンセル時は空文字列
-         */
-        function myPrompt(msg) {
-            try {
-                const result = window.prompt(msg);
-                // キャンセルまたは空入力の場合は"0"を返す
-                return result === null || result.trim() === '' ? "0" : result;
-            } catch (e) {
-                console.error("入力処理でエラーが発生:", e);
-                return "0";  // エラー時は"0"を返す
-            }
-        }
+        document.addEventListener('DOMContentLoaded', () => {
+            //==============================================
+            // Global variables and constants
+            //==============================================
+            let myInterpreter = null;
+            let workspace = null;
+            let oneBasedMode = false;
+            let ignoreBreakpoints = false;
+            let previousDebugVars = {};
+            const EXECUTION_TIMEOUT_STEPS = 2000000;
 
-        //==============================================
-        // グローバル変数・定数の定義
-        //==============================================
-        // インタプリタのインスタンス
-        var myInterpreter = null;
-        window.myInterpreter = null;
-
-        // 配列インデックスの開始位置フラグ (true: 1始まり, false: 0始まり)
-        window.USE_ONE_BASED_INDEX = false;
-
-        // 実行時の優先順位定数
-        const ORDER_ATOMIC = 0;          // 最高優先度（リテラルなど）
-        const ORDER_NONE = 99;           // 優先度指定なし
-        const ORDER_ASSIGNMENT = 2;       // 代入演算子
-        const ORDER_FUNCTION_CALL = 2;   // 関数呼び出し
-        const ORDER_MULTIPLICATION = 5;   // 乗算・除算
-        const ORDER_LOGICAL_NOT = 14;    // 論理否定
-        const ORDER_LOGICAL_AND = 15;    // 論理AND
-        const ORDER_RELATIONAL = 13;     // 比較演算子
-
-        //==============================================
-        // デバッグ支援機能
-        //==============================================
-        /**
-         * 変数の状態を記録・監視するためのオブジェクト
-         * 各変数の値の変更を追跡し、視覚的な表示に使用
-         */
-        window.debugVars = {};
-
-        /**
-         * 変数の値を記録し、デバッグ表示用に保存
-         * @param {string} varName - 変数名
-         * @param {any} value - 変数の値
-         */
-        window.nativeLog = function (varName, value) {
-            window.debugVars[varName] = value;
-            let strValue = (typeof value === 'object' && Array.isArray(value))
-                ? JSON.stringify(value)
-                : value;
-            console.log("[nativeLog] " + varName + " = " + strValue);
-        };
-
-        //==============================================
-        // 配列操作の安全性確保
-        //==============================================
-        /**
-         * 1次元配列への安全なアクセスを提供
-         * - 範囲外アクセスのチェック
-         * - 1始まり/0始まりインデックスの自動変換
-         * @param {Array} arr - アクセス対象の配列
-         * @param {number} idx - インデックス
-         * @returns {*} 配列の要素
-         * @throws {Error} 不正なアクセスの場合
-         */
-        function safeArrayAccess(arr, idx) {
-            const nativeArr = Array.isArray(arr) ? arr : (window.myInterpreter ? window.myInterpreter.pseudoToNative(arr) : arr);
-            // 1始まりモードの場合、内部的に0始まりへ変換
-            if (window.oneBasedMode) { idx = idx - 1; }
-            if (!Array.isArray(nativeArr)) {
-                displayOutput("エラー: " + nativeArr + " は配列ではありません。");
-                throw new Error("配列ではない");
-            }
-            if (idx < 0 || idx >= nativeArr.length) {
-                displayOutput("エラー: 配列の範囲外アクセス (index: " + (window.oneBasedMode ? idx + 1 : idx) + ")");
-                throw new Error("配列の範囲外アクセス");
-            }
-            return nativeArr[idx];
-        }
-
-        /**
-         * 2次元配列への安全なアクセスを提供
-         * - 範囲外アクセスのチェック
-         * - 1始まり/0始まりインデックスの自動変換
-         * @param {Array} arr - アクセス対象の2次元配列
-         * @param {number} i - 行インデックス
-         * @param {number} j - 列インデックス
-         * @returns {*} 配列の要素
-         * @throws {Error} 不正なアクセスの場合
-         */
-        function safeArrayAccess2d(arr, i, j) {
-            const nativeArr = Array.isArray(arr) ? arr : (window.myInterpreter ? window.myInterpreter.pseudoToNative(arr) : arr);
-            // 1始まりモードの場合、内部的に0始まりへ変換
-            if (window.oneBasedMode) { i = i - 1; j = j - 1; }
-            if (!Array.isArray(nativeArr)) {
-                displayOutput("エラー: " + nativeArr + " は2次元配列ではありません。");
-                throw new Error("2次元配列ではない");
-            }
-            if (i < 0 || i >= nativeArr.length) {
-                displayOutput("エラー: 2次元配列の1次元目範囲外 (index: " + (window.oneBasedMode ? i + 1 : i) + ")");
-                throw new Error("2次元配列の1次元目範囲外");
-            }
-            if (!Array.isArray(nativeArr[i])) {
-                displayOutput("エラー: " + nativeArr[i] + " は配列ではありません。");
-                throw new Error("2次元配列の1次元目が配列でない");
-            }
-            if (j < 0 || j >= nativeArr[i].length) {
-                displayOutput("エラー: 2次元配列の2次元目範囲外 (index: " + (window.oneBasedMode ? j + 1 : j) + ")");
-                throw new Error("2次元配列の2次元目範囲外");
-            }
-            return nativeArr[i][j];
-        }
-
-        //==============================================
-        // ユーティリティ関数
-        //==============================================
-        /**
-         * 変数名を有効なJavaScript識別子に変換
-         * @param {string} name - 元の変数名
-         * @returns {string} 有効な識別子
-         */
-        function sanitizeVarName(name) {
-            if (/^[a-zA-Z_$][0-9a-zA-Z_$]*$/.test(name)) {
-                return name;
-            }
-            return '_' + name;
-        }
-
-        /**
-         * XMLテキストをDOMに変換（ブロックの保存・読み込みに使用）
-         * @param {string} xmlText - XMLテキスト
-         * @returns {Document} 変換されたDOM
-         */
-        function textToDom(xmlText) {
-            if (Blockly.Xml && typeof Blockly.Xml.textToDom === 'function') {
-                return Blockly.Xml.textToDom(xmlText);
-            } else {
-                return Blockly.utils.xml.textToDom(xmlText);
-            }
-        }
-        function workspaceToDom(workspace) {
-            if (Blockly.Xml && typeof Blockly.Xml.workspaceToDom === 'function') {
-                return Blockly.Xml.workspaceToDom(workspace);
-            } else {
-                return Blockly.utils.xml.workspaceToDom(workspace);
-            }
-        }
-        function domToText(dom) {
-            if (Blockly.Xml && typeof Blockly.Xml.domToText === 'function') {
-                return Blockly.Xml.domToText(dom);
-            } else {
-                return Blockly.utils.xml.domToText(dom);
-            }
-        }
-        function domToWorkspace(dom, workspace) {
-            if (Blockly.Xml && typeof Blockly.Xml.domToWorkspace === 'function') {
-                Blockly.Xml.domToWorkspace(dom, workspace);
-            } else {
-                Blockly.utils.xml.domToWorkspace(dom, workspace);
-            }
-        }
-
-        //==============================================
-        // Blockly ワークスペース作成
-        //==============================================
-        const workspace = Blockly.inject('blocklyDiv', {
-            toolbox: document.getElementById('toolbox')
-        });
-
-        document.addEventListener('DOMContentLoaded', function () {
-            // Blockly workspace の生成後に実行される処理
-            // workspace 初期化後、少し遅延させてサイズの再計算とスクロール位置のリセットを行う
-            setTimeout(() => {
-                if (workspace) {
-                    Blockly.svgResize(workspace);
-                    const blocklyDiv = document.getElementById('blocklyDiv');
-                    blocklyDiv.scrollTop = 0;
-                    blocklyDiv.scrollLeft = 0;
-                    if (workspace.scrollCenter) {
-                        workspace.scrollCenter();
-                    }
-                }
-            }, 50);
-        });
-
-        //==============================================
-        // 出力表示 (実行結果用)
-        //==============================================
-        function displayOutput(text) {
-            const outputDiv = document.getElementById('outputDiv');
-            outputDiv.innerHTML += text + "<br>";
-        }
-        function displayBinary(num) {
-            const bin = Number(num).toString(2);
-            displayOutput(bin);
-        }
-
-        //==============================================
-        // ブロック定義 (JSON)
-        //==============================================
-        Blockly.defineBlocksWithJsonArray([
-            {
-                "type": "assignment",
-                "message0": "%1 ← %2",
-                "args0": [
-                    { "type": "field_input", "name": "VAR", "text": "hensu" },
-                    { "type": "input_value", "name": "VALUE" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "変数に値を代入する",
-                "helpUrl": ""
-            },
-            {
-                "type": "number_literal",
-                "message0": "%1",
-                "args0": [
-                    { "type": "field_number", "name": "NUM", "value": 0 }
-                ],
-                "output": "Number",
-                "colour": 230,
-                "tooltip": "数値を入力する",
-                "helpUrl": ""
-            },
-            {
-                "type": "string_literal",
-                "message0": "「%1」",
-                "args0": [
-                    { "type": "field_input", "name": "TEXT", "text": "テキスト" }
-                ],
-                "output": "String",
-                "colour": 160,
-                "tooltip": "文字列を入力する",
-                "helpUrl": ""
-            },
-            {
-                "type": "external_input",
-                "message0": "【外部からの入力】",
-                "output": null,
-                "colour": 160,
-                "tooltip": "ユーザーからの入力を受け取る",
-                "helpUrl": ""
-            },
-            {
-                "type": "variable_access",
-                "message0": "変数 %1",
-                "args0": [
-                    { "type": "field_input", "name": "VAR", "text": "hensu" }
-                ],
-                "output": null,
-                "colour": 230,
-                "tooltip": "変数の値を取得する",
-                "helpUrl": ""
-            },
-            {
-                "type": "array_assignment_1d",
-                "message0": "%1 [ %2 ] ← %3",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Hairetsu" },
-                    { "type": "input_value", "name": "INDEX", "check": "Number" },
-                    { "type": "input_value", "name": "VALUE" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "1次元配列の要素に値を代入する",
-                "helpUrl": ""
-            },
-            {
-                "type": "array_assignment_2d",
-                "message0": "%1 [ %2, %3 ] ← %4",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" },
-                    { "type": "input_value", "name": "INDEX1", "check": "Number" },
-                    { "type": "input_value", "name": "INDEX2", "check": "Number" },
-                    { "type": "input_value", "name": "VALUE" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "2次元配列の要素に値を代入する",
-                "helpUrl": ""
-            },
-            {
-                "type": "array_assignment_full",
-                "message0": "%1 ← { %2 }",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Hairetsu" },
-                    { "type": "field_input", "name": "ELEMENTS", "text": "87,45,72,100" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "配列全体に値を代入する",
-                "helpUrl": ""
-            },
-            // 追加: 2次元配列一括定義ブロック
-            {
-                "type": "array_assignment_full_2d",
-                "message0": "%1 ← { %2 }",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" },
-                    { "type": "field_input", "name": "ELEMENTS", "text": "1,2;3,4" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "2次元配列全体に値を代入する（行はセミコロン、要素はカンマ区切り）",
-                "helpUrl": ""
-            },
-            {
-                "type": "array_access_1d",
-                "message0": "%1 [ %2 ]",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Hairetsu" },
-                    { "type": "input_value", "name": "INDEX", "check": "Number" }
-                ],
-                "output": null,
-                "colour": 230,
-                "tooltip": "1次元配列の要素を参照する",
-                "helpUrl": ""
-            },
-            {
-                "type": "array_access_2d",
-                "message0": "%1 [ %2, %3 ]",
-                "args0": [
-                    { "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" },
-                    { "type": "input_value", "name": "INDEX1", "check": "Number" },
-                    { "type": "input_value", "name": "INDEX2", "check": "Number" }
-                ],
-                "output": null,
-                "colour": 230,
-                "tooltip": "2次元配列の要素を参照する",
-                "helpUrl": ""
-            },
-            {
-                "type": "arithmetic",
-                "message0": "%1 %2 %3",
-                "args0": [
-                    { "type": "input_value", "name": "A", "check": "Number" },
-                    {
-                        "type": "field_dropdown",
-                        "name": "OP",
-                        "options": [
-                            ["+", "+"],
-                            ["-", "-"],
-                            ["×", "*"],
-                            ["/", "/"],
-                            ["÷", "÷"],
-                            ["%", "%"]
-                        ]
-                    },
-                    { "type": "input_value", "name": "B", "check": "Number" }
-                ],
-                "inputsInline": true,
-                "output": "Number",
-                "colour": 230,
-                "tooltip": "算術演算",
-                "helpUrl": ""
-            },
-            {
-                "type": "comparison",
-                "message0": "%1 %2 %3",
-                "args0": [
-                    { "type": "input_value", "name": "A" },
-                    {
-                        "type": "field_dropdown",
-                        "name": "OP",
-                        "options": [
-                            ["=", "==="],
-                            ["≠", "!=="],
-                            [">", ">"],
-                            [">=", ">="],
-                            ["<", "<"],
-                            ["<=", "<="]
-                        ]
-                    },
-                    { "type": "input_value", "name": "B" }
-                ],
-                "output": "Boolean",
-                "colour": 210,
-                "tooltip": "比較演算子",
-                "helpUrl": ""
-            },
-            {
-                "type": "logic_operation_jp",
-                "message0": "%1 %2 %3",
-                "args0": [
-                    { "type": "input_value", "name": "A", "check": "Boolean" },
-                    {
-                        "type": "field_dropdown",
-                        "name": "OP",
-                        "options": [
-                            ["かつ", "&&"],
-                            ["または", "||"]
-                        ]
-                    },
-                    { "type": "input_value", "name": "B", "check": "Boolean" }
-                ],
-                "output": "Boolean",
-                "colour": 210,
-                "tooltip": "論理演算子（and/or）",
-                "helpUrl": ""
-            },
-            {
-                "type": "logic_negate_jp",
-                "message0": "でない %1",
-                "args0": [
-                    { "type": "input_value", "name": "BOOL", "check": "Boolean" }
-                ],
-                "output": "Boolean",
-                "colour": 210,
-                "tooltip": "論理否定",
-                "helpUrl": ""
-            },
-            {
-                "type": "if_statement",
-                "message0": "もし %1 ならば\n%2",
-                "args0": [
-                    { "type": "input_value", "name": "CONDITION", "check": "Boolean" },
-                    { "type": "input_statement", "name": "DO" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 210,
-                "tooltip": "if文",
-                "helpUrl": ""
-            },
-            {
-                "type": "if_else_statement",
-                "message0": "もし %1 ならば\n%2\nそうでなければ\n%3",
-                "args0": [
-                    { "type": "input_value", "name": "CONDITION", "check": "Boolean" },
-                    { "type": "input_statement", "name": "DO0" },
-                    { "type": "input_statement", "name": "ELSE" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 210,
-                "tooltip": "if-else文",
-                "helpUrl": ""
-            },
-            {
-                "type": "while_loop",
-                "message0": "%1 の間\n%2",
-                "args0": [
-                    { "type": "input_value", "name": "CONDITION", "check": "Boolean" },
-                    { "type": "input_statement", "name": "DO" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 120,
-                "tooltip": "whileループ",
-                "helpUrl": ""
-            },
-            {
-                "type": "do_while_loop",
-                "message0": "繰り返し\n%1\nを、%2 になるまで実行する",
-                "args0": [
-                    { "type": "input_statement", "name": "DO" },
-                    { "type": "input_value", "name": "CONDITION", "check": "Boolean" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 120,
-                "tooltip": "後判定ループ",
-                "helpUrl": ""
-            },
-            {
-                "type": "for_loop",
-                "message0": "%1 を %2 から %3 まで %4 ずつ増やしながら\n%5",
-                "args0": [
-                    { "type": "field_input", "name": "VAR", "text": "i" },
-                    { "type": "input_value", "name": "FROM", "check": "Number" },
-                    { "type": "input_value", "name": "TO", "check": "Number" },
-                    { "type": "input_value", "name": "STEP", "check": "Number" },
-                    { "type": "input_statement", "name": "DO" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 120,
-                "tooltip": "forループ",
-                "helpUrl": ""
-            },
-            {
-                "type": "inc_dec",
-                "message0": "%1 を %2",
-                "args0": [
-                    { "type": "field_input", "name": "VAR", "text": "hensu" },
-                    {
-                        "type": "field_dropdown",
-                        "name": "OP",
-                        "options": [
-                            ["1 増やす", "+1"],
-                            ["1 減らす", "-1"]
-                        ]
-                    }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 230,
-                "tooltip": "変数のインクリメント/デクリメント",
-                "helpUrl": ""
-            },
-            {
-                "type": "square",
-                "message0": "二乗( %1 )",
-                "args0": [
-                    { "type": "input_value", "name": "NUM", "check": "Number" }
-                ],
-                "output": "Number",
-                "colour": 290,
-                "tooltip": "二乗を計算する",
-                "helpUrl": ""
-            },
-            {
-                "type": "power",
-                "message0": "べき乗( %1, %2 )",
-                "args0": [
-                    { "type": "input_value", "name": "BASE", "check": "Number" },
-                    { "type": "input_value", "name": "EXP", "check": "Number" }
-                ],
-                "output": "Number",
-                "colour": 290,
-                "tooltip": "べき乗を計算する",
-                "helpUrl": ""
-            },
-            {
-                "type": "random",
-                "message0": "乱数( %1, %2 )",
-                "args0": [
-                    { "type": "input_value", "name": "MIN", "check": "Number" },
-                    { "type": "input_value", "name": "MAX", "check": "Number" }
-                ],
-                "output": "Number",
-                "colour": 290,
-                "tooltip": "乱数を生成する",
-                "helpUrl": ""
-            },
-            {
-                "type": "display_binary",
-                "message0": "二進で表示する( %1 )",
-                "args0": [
-                    { "type": "input_value", "name": "NUM", "check": "Number" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 290,
-                "tooltip": "数値を2進数で表示する",
-                "helpUrl": ""
-            },
-            {
-                "type": "simple_display",
-                "message0": "表示する %1",
-                "args0": [
-                    { "type": "input_value", "name": "VALUE" }
-                ],
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 160,
-                "tooltip": "１つの値を表示する",
-                "helpUrl": ""
-            },
-            {
-                "type": "display",
-                "message0": "表示項目",
-                "previousStatement": true,
-                "nextStatement": true,
-                "colour": 160,
-                "tooltip": "複数の値を連結して表示する",
-                "mutator": "display_mutator"
-            },
-            {
-                "type": "breakpoint",
-                "message0": "（ブレークポイント）",
-                "previousStatement": null,
-                "nextStatement": null,
-                "colour": 0,
-                "tooltip": "ここで処理を一時停止するブレークポイント",
-                "helpUrl": ""
-            }
-        ]);
-
-        //==============================================
-        // display ブロック(ミューテータ)
-        //==============================================
-        Blockly.Blocks['display_mutator_container'] = {
-            init: function () {
-                this.appendDummyInput().appendField("表示項目");
-                this.appendStatementInput("STACK");
-                this.setColour(160);
-                this.setTooltip("");
-                this.contextMenu = false;
-            }
-        };
-        Blockly.Blocks['display_mutator_item'] = {
-            init: function () {
-                this.appendDummyInput().appendField("項目");
-                this.setPreviousStatement(true);
-                this.setNextStatement(true);
-                this.setColour(160);
-                this.setTooltip("");
-                this.contextMenu = false;
-            }
-        };
-        const displayMutatorObject = {
-            mutationToDom: function () {
-                const container = document.createElement('mutation');
-                container.setAttribute('items', this.itemCount_);
-                return container;
-            },
-            domToMutation: function (xmlElement) {
-                this.itemCount_ = parseInt(xmlElement.getAttribute('items'), 10) || 0;
-                this.updateShape_();
-            },
-            decompose: function (workspace) {
-                const containerBlock = workspace.newBlock('display_mutator_container');
-                containerBlock.initSvg();
-                let connection = containerBlock.getInput('STACK').connection;
-                for (let i = 0; i < this.itemCount_; i++) {
-                    const itemBlock = workspace.newBlock('display_mutator_item');
-                    itemBlock.initSvg();
-                    connection.connect(itemBlock.previousConnection);
-                    connection = itemBlock.nextConnection;
-                }
-                return containerBlock;
-            },
-            compose: function (containerBlock) {
-                let itemBlock = containerBlock.getInputTargetBlock('STACK');
-                const connections = [];
-                while (itemBlock) {
-                    connections.push(itemBlock.valueConnection_);
-                    itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock();
-                }
-                this.itemCount_ = connections.length;
-                // 既存の入力を削除
-                for (let i = this.inputList.length - 1; i >= 0; i--) {
-                    const input = this.inputList[i];
-                    if (input.name && input.name.startsWith('ADD')) {
-                        this.removeInput(input.name);
-                    }
-                }
-                this.updateShape_();
-                // 新しい入力を再配置
-                for (let i = 0; i < this.itemCount_; i++) {
-                    if (connections[i]) {
-                        this.getInput('ADD' + i).connection.connect(connections[i]);
-                    }
-                }
-            },
-            saveConnections: function (containerBlock) {
-                let itemBlock = containerBlock.getInputTargetBlock('STACK');
-                let i = 0;
-                while (itemBlock) {
-                    const input = this.getInput('ADD' + i);
-                    itemBlock.valueConnection_ = input && input.connection.targetConnection;
-                    i++;
-                    itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock();
-                }
-            }
-        };
-        function displayMutatorHelper() {
-            if (typeof this.itemCount_ === 'undefined') {
-                this.itemCount_ = 2;
-                this.updateShape_();
-            }
-        }
-        Blockly.Extensions.registerMutator(
-            'display_mutator',
-            displayMutatorObject,
-            displayMutatorHelper,
-            ['display_mutator_item']
-        );
-        Blockly.Blocks['display'] = {
-            init: function () {
-                this.setPreviousStatement(true, null);
-                this.setNextStatement(true, null);
-                this.setColour(160);
-                this.setTooltip("複数の値を連結して表示する");
-                this.jsonInit({ "mutator": "display_mutator" });
-                this.updateShape_();
-            },
-            updateShape_: function () {
-                if (typeof this.itemCount_ === 'undefined') return;
-                for (let i = this.inputList.length - 1; i >= 0; i--) {
-                    const input = this.inputList[i];
-                    if (input.name && input.name.startsWith('ADD')) {
-                        this.removeInput(input.name);
-                    }
-                }
-                for (let i = 0; i < this.itemCount_; i++) {
-                    if (i === 0) {
-                        this.appendValueInput('ADD' + i)
-                            .setCheck(null)
-                            .appendField("");
-                    } else {
-                        this.appendValueInput('ADD' + i)
-                            .setCheck(null)
-                            .appendField("と");
-                    }
-                }
-                if (!this.getInput('END')) {
-                    this.appendDummyInput('END')
-                        .appendField("を表示する");
-                }
-            }
-        };
-
-        //==============================================
-        // 関数のコード生成処理
-        //==============================================
-        // 戻り値ありの関数定義
-        Blockly.JavaScript['procedures_defreturn'] = function(block) {
-            // 関数名を取得
-            const funcName = block.getFieldValue('NAME');
-            
-            // 引数を取得
-            const args = [];
-            const paramNames = [];
-            for (let i = 0; i < block.arguments_.length; i++) {
-                paramNames.push(block.arguments_[i]);
-            }
-            
-            // 関数本体のコードを生成
-            let branch = Blockly.JavaScript.statementToCode(block, 'STACK');
-            
-            // 戻り値のコードを生成（存在する場合）
-            let returnValue = Blockly.JavaScript.valueToCode(block, 'RETURN', Blockly.JavaScript.ORDER_NONE) || '';
-            if (returnValue) {
-                returnValue = '  return ' + returnValue + ';\n';
-            }
-            
-            // 関数定義のコードを生成
-            const code = 'function ' + funcName + '(' + paramNames.join(', ') + ') {\n' +
-                        branch +
-                        returnValue +
-                        '}\n';
-            
-            return code;
-        };
-
-        // 戻り値のない関数定義
-        Blockly.JavaScript['procedures_defnoreturn'] = function(block) {
-            // 関数名を取得
-            const funcName = block.getFieldValue('NAME');
-            
-            // 引数を取得
-            const args = [];
-            const paramNames = [];
-            for (let i = 0; i < block.arguments_.length; i++) {
-                paramNames.push(block.arguments_[i]);
-            }
-            
-            // 関数本体のコードを生成
-            const branch = Blockly.JavaScript.statementToCode(block, 'STACK');
-            
-            // 関数定義のコードを生成
-            const code = 'function ' + funcName + '(' + paramNames.join(', ') + ') {\n' +
-                        branch +
-                        '}\n';
-            
-            return code;
-        };
-
-        // 戻り値ありの関数呼び出し
-        Blockly.JavaScript['procedures_callreturn'] = function(block) {
-            // 関数名を取得
-            const funcName = block.getFieldValue('NAME');
-            
-            // 引数を取得
-            const args = [];
-            for (let i = 0; i < block.arguments_.length; i++) {
-                args.push(Blockly.JavaScript.valueToCode(block, 'ARG' + i, Blockly.JavaScript.ORDER_NONE) || 'null');
-            }
-            
-            // 関数呼び出しのコードを生成
-            const code = funcName + '(' + args.join(', ') + ')';
-            
-            // 優先順位を考慮して返す
-            return [code, Blockly.JavaScript.ORDER_FUNCTION_CALL];
-        };
-
-        // 戻り値のない関数呼び出し
-        Blockly.JavaScript['procedures_callnoreturn'] = function(block) {
-            // 関数名を取得
-            const funcName = block.getFieldValue('NAME');
-            
-            // 引数を取得
-            const args = [];
-            for (let i = 0; i < block.arguments_.length; i++) {
-                args.push(Blockly.JavaScript.valueToCode(block, 'ARG' + i, Blockly.JavaScript.ORDER_NONE) || 'null');
-            }
-            
-            // 関数呼び出しのコードを生成
-            const code = funcName + '(' + args.join(', ') + ');\n';
-            
-            return code;
-        };
-
-        //右側のウインドウ幅の動的変更
-        document.addEventListener('DOMContentLoaded', function () {
-            const resizer = document.getElementById('resizer');
-            const rightPane = document.getElementById('mainRight');
-            const blocklyDiv = document.getElementById('blocklyDiv');
-
-            let x = 0;
-            let w = 0;
-
-            const mouseDownHandler = function (e) {
-                x = e.clientX;
-                w = parseInt(getComputedStyle(rightPane).width, 10);
-
-                document.addEventListener('mousemove', mouseMoveHandler);
-                document.addEventListener('mouseup', mouseUpHandler);
-            };
-
-            const mouseMoveHandler = function (e) {
-                const dx = e.clientX - x;
-                const newWidth = Math.max(200, Math.min(w - dx, window.innerWidth * 0.5));
-                rightPane.style.width = `${newWidth}px`;
-                // Blocklyのサイズを更新（setTimeoutで遅延を入れる）
-                if (workspace) {
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 10);
-                }
-            };
-
-            const mouseUpHandler = function () {
-                document.removeEventListener('mousemove', mouseMoveHandler);
-                document.removeEventListener('mouseup', mouseUpHandler);
-                // ドラッグ終了時にもBlocklyのサイズを更新
-                if (workspace) {
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 10);
-                }
-            };
-
-            resizer.addEventListener('mousedown', mouseDownHandler);
-        });
-
-        //==============================================
-        // コード生成 (新方式)
-        //==============================================
-        Blockly.JavaScript.forBlock = {}; // 新しい辞書を用意
-
-        // assignment ブロック：代入後に nativeLog() を呼ぶ
-        Blockly.JavaScript.forBlock['assignment'] = function (block, generator) {
-            const varName = block.getFieldValue('VAR');
-            const value = generator.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0';
-            return varName + " = " + value + ";\n" +
-                "nativeLog(" + JSON.stringify(varName) + ", " + varName + ");\n";
-        };
-        Blockly.JavaScript.forBlock['number_literal'] = function (block, generator) {
-            const num = block.getFieldValue('NUM');
-            return [String(num), ORDER_ATOMIC];
-        };
-        Blockly.JavaScript.forBlock['string_literal'] = function (block, generator) {
-            const text = block.getFieldValue('TEXT');
-            return [JSON.stringify(text), ORDER_ATOMIC];
-        };
-        Blockly.JavaScript.forBlock['external_input'] = function (block, generator) {
-            return ["myPrompt('外部からの入力')", ORDER_FUNCTION_CALL];
-        };
-        Blockly.JavaScript.forBlock['variable_access'] = function (block, generator) {
-            const varName = block.getFieldValue('VAR');
-            return [varName, ORDER_ATOMIC];
-        };
-        Blockly.JavaScript.forBlock['array_assignment_1d'] = function (block, generator) {
-            const arr = block.getFieldValue('ARRAY');
-            let idx = generator.valueToCode(block, 'INDEX', ORDER_NONE) || '0';
-            // 1始まりモードの場合、インデックスに -1 を適用
-            if (document.getElementById('oneBasedCheckbox').checked) {
-                idx = '(' + idx + ' - 1)';
-            }
-            const val = generator.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0';
-            return arr + "[" + idx + "] = " + val + ";\n" +
-                "nativeLog(" + JSON.stringify(arr) + ", " + arr + ");\n";
-        };
-        Blockly.JavaScript.forBlock['array_assignment_2d'] = function (block, generator) {
-            const arr = block.getFieldValue('ARRAY');
-            const i = generator.valueToCode(block, 'INDEX1', ORDER_NONE) || '0';
-            const j = generator.valueToCode(block, 'INDEX2', ORDER_NONE) || '0';
-            const val = generator.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0';
-            return arr + "[" + i + "][" + j + "] = " + val + ";\n";
-        };
-        Blockly.JavaScript.forBlock['array_assignment_full'] = function (block, generator) {
-            const arr = block.getFieldValue('ARRAY');
-            const elements = block.getFieldValue('ELEMENTS');
-            const splitted = elements
-                .replace(/[{}]/g, '')
-                .split(',')
-                .map(s => {
-                    const trimmed = s.trim();
-                    const numVal = Number(trimmed);
-                    if (!Number.isNaN(numVal)) {
-                        return numVal;
-                    } else {
-                        // クオートの有無に関わらず、数値でない値は文字列として扱う
-                        if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
-                            return trimmed.slice(1, -1);
-                        }
-                        return trimmed; // 文字列としてそのまま使用
-                    }
-                });
-            return arr + " = " + JSON.stringify(splitted) + ";\n" +
-                "nativeLog(" + JSON.stringify(arr) + ", " + arr + ");\n";
-        };
-        // 追加: 2次元配列一括定義ブロックのコード生成処理
-        Blockly.JavaScript.forBlock['array_assignment_full_2d'] = function (block, generator) {
-            const arr = sanitizeVarName(block.getFieldValue('ARRAY'));
-            const elementsText = block.getFieldValue('ELEMENTS') || '';
-            let arrayLiteral = [];
-
-            // セミコロンが含まれていれば行単位とみなす。（例："1,2;3,4"）
-            if (elementsText.indexOf(';') !== -1) {
-                const rowTexts = elementsText.split(';');
-                for (let i = 0; i < rowTexts.length; i++) {
-                    // 各行をカンマで分割して要素リストに変換
-                    const row = rowTexts[i].split(',').map(e => {
-                        const trimmed = e.trim();
-                        const numVal = Number(trimmed);
-                        return isNaN(numVal) ? JSON.stringify(trimmed) : numVal;
-                    });
-                    arrayLiteral.push('[' + row.join(',') + ']');
-                }
-            } else {
-                // セミコロンがない場合は、既存のフィールド (ROWS, COLUMNS) による処理を行う
-                const rows = Number(block.getFieldValue('ROWS') || '0');
-                const columns = Number(block.getFieldValue('COLUMNS') || '0');
-                const elements = elementsText.split(',').map(e => e.trim());
-                let index = 0;
-                for (let r = 0; r < rows; r++) {
-                    let row = [];
-                    for (let c = 0; c < columns; c++) {
-                        const trimmed = elements[index] || '0';
-                        const numVal = Number(trimmed);
-                        row.push(isNaN(numVal) ? JSON.stringify(trimmed) : numVal);
-                        index++;
-                    }
-                    arrayLiteral.push('[' + row.join(',') + ']');
-                }
-            }
-            return "var " + arr + " = [" + arrayLiteral.join(',') + "];\n" +
-                "nativeLog(" + JSON.stringify(arr) + ", " + arr + ");\n";
-        };
-        Blockly.JavaScript.forBlock['array_access_1d'] = function (block, generator) {
-            const arr = block.getFieldValue('ARRAY');
-            const idx = generator.valueToCode(block, 'INDEX', ORDER_NONE) || '0';
-            return ["safeArrayAccess(" + arr + ", " + idx + ")", ORDER_FUNCTION_CALL];
-        };
-        Blockly.JavaScript.forBlock['array_access_2d'] = function (block, generator) {
-            const arr = block.getFieldValue('ARRAY');
-            const i = generator.valueToCode(block, 'INDEX1', ORDER_NONE) || '0';
-            const j = generator.valueToCode(block, 'INDEX2', ORDER_NONE) || '0';
-            return ["safeArrayAccess2d(" + arr + ", " + i + ", " + j + ")", ORDER_FUNCTION_CALL];
-        };
-        Blockly.JavaScript.forBlock['arithmetic'] = function (block, generator) {
-            const a = generator.valueToCode(block, 'A', ORDER_ATOMIC) || '0';
-            const op = block.getFieldValue('OP');
-            const b = generator.valueToCode(block, 'B', ORDER_ATOMIC) || '0';
-            if (op === '÷') {
-                return ["Math.floor(" + a + " / " + b + ")", ORDER_FUNCTION_CALL];
-            } else {
-                return ["(" + a + " " + op + " " + b + ")", ORDER_ATOMIC];
-            }
-        };
-        Blockly.JavaScript.forBlock['comparison'] = function (block, generator) {
-            const a = generator.valueToCode(block, 'A', ORDER_NONE) || '0';
-            const op = block.getFieldValue('OP');
-            const b = generator.valueToCode(block, 'B', ORDER_NONE) || '0';
-            return ["(" + a + " " + op + " " + b + ")", ORDER_RELATIONAL];
-        };
-        Blockly.JavaScript.forBlock['logic_operation_jp'] = function (block, generator) {
-            const op = block.getFieldValue('OP');
-            const A = generator.valueToCode(block, 'A', ORDER_LOGICAL_AND) || 'false';
-            const B = generator.valueToCode(block, 'B', ORDER_LOGICAL_AND) || 'false';
-            return ["(" + A + " " + op + " " + B + ")", ORDER_LOGICAL_AND];
-        };
-        Blockly.JavaScript.forBlock['logic_negate_jp'] = function (block, generator) {
-            const val = generator.valueToCode(block, 'BOOL', ORDER_LOGICAL_NOT) || 'false';
-            return ["(!" + val + ")", ORDER_LOGICAL_NOT];
-        };
-        Blockly.JavaScript.forBlock['if_statement'] = function (block, generator) {
-            const cond = generator.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false';
-            const branch = generator.statementToCode(block, 'DO');
-            return `if (${cond}) {\n${branch}}\n`;
-        };
-        Blockly.JavaScript.forBlock['if_else_statement'] = function (block, generator) {
-            const cond = generator.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false';
-            const do0 = generator.statementToCode(block, 'DO0');
-            const el = generator.statementToCode(block, 'ELSE');
-            return `if (${cond}) {\n${do0}} else {\n${el}}\n`;
-        };
-        Blockly.JavaScript.forBlock['while_loop'] = function (block, generator) {
-            const cond = generator.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false';
-            const branch = generator.statementToCode(block, 'DO');
-            return `while (${cond}) {\n${branch}}\n`;
-        };
-        Blockly.JavaScript.forBlock['do_while_loop'] = function (block, generator) {
-            const branch = generator.statementToCode(block, 'DO');
-            const cond = generator.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false';
-            return `do {\n${branch}} while (!(${cond}));\n`;
-        };
-        Blockly.JavaScript.forBlock['for_loop'] = function (block, generator) {
-            const varName = block.getFieldValue('VAR');
-            const fromVal = generator.valueToCode(block, 'FROM', ORDER_NONE) || '0';
-            const toVal = generator.valueToCode(block, 'TO', ORDER_NONE) || '0';
-            const stepVal = generator.valueToCode(block, 'STEP', ORDER_NONE) || '1';
-            const branch = generator.statementToCode(block, 'DO');
-            return `for (${varName} = ${fromVal}; ${varName} <= ${toVal}; ${varName} += ${stepVal}) {
-  nativeLog(${JSON.stringify(varName)}, ${varName});
-${branch}}\n`;
-        };
-        Blockly.JavaScript.forBlock['inc_dec'] = function (block, generator) {
-            const varName = block.getFieldValue('VAR');
-            const op = block.getFieldValue('OP');
-            let code = "";
-            if (op === '+1') {
-                code = varName + " = " + varName + " + 1;\n";
-            } else {
-                code = varName + " = " + varName + " - 1;\n";
-            }
-            code += "nativeLog(" + JSON.stringify(varName) + ", " + varName + ");\n";
-            return code;
-        };
-        Blockly.JavaScript.forBlock['square'] = function (block, generator) {
-            const num = generator.valueToCode(block, 'NUM', ORDER_NONE) || '0';
-            return [`(${num} * ${num})`, ORDER_MULTIPLICATION];
-        };
-        Blockly.JavaScript.forBlock['power'] = function (block, generator) {
-            const base = generator.valueToCode(block, 'BASE', ORDER_NONE) || '0';
-            const exp = generator.valueToCode(block, 'EXP', ORDER_NONE) || '0';
-            return [`Math.pow(${base}, ${exp})`, ORDER_FUNCTION_CALL];
-        };
-        Blockly.JavaScript.forBlock['random'] = function (block, generator) {
-            const min = generator.valueToCode(block, 'MIN', ORDER_NONE) || '0';
-            const max = generator.valueToCode(block, 'MAX', ORDER_NONE) || '0';
-            const code = `Math.floor(Math.random() * ((${max} - ${min}) + 1)) + ${min}`;
-            return [code, ORDER_FUNCTION_CALL];
-        };
-        Blockly.JavaScript.forBlock['display_binary'] = function (block, generator) {
-            const num = generator.valueToCode(block, 'NUM', ORDER_NONE) || '0';
-            return `displayBinary(${num});\n`;
-        };
-        Blockly.JavaScript.forBlock['simple_display'] = function (block, generator) {
-            const val = generator.valueToCode(block, 'VALUE', ORDER_NONE) || '""';
-            return `displayOutput(${val});\n`;
-        };
-        Blockly.JavaScript.forBlock['display'] = function (block, generator) {
-            const itemCount = block.itemCount_ || 0;
-            let codeParts = [];
-            for (let i = 0; i < itemCount; i++) {
-                const inputCode = generator.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""';
-                codeParts.push(`String(${inputCode})`);
-            }
-            const joined = codeParts.join(' + ');
-            return `displayOutput(${joined});\n`;
-        };
-        Blockly.JavaScript.forBlock['breakpoint'] = function (block, generator) {
-            return "checkBreakpoint();\n";
-        };
-
-        //==============================================
-        // エクスポート／インポート
-        //==============================================
-        document.getElementById('exportButton').addEventListener('click', () => {
-            try {
-                if (!workspace) {
-                    throw new Error("ワークスペースが初期化されていません");
-                }
-
-                // ワークスペースの状態をログ
-                console.log("Workspace state:", {
-                    isDragging: workspace.isDragging(),
-                    topBlocks: workspace.getTopBlocks().length,
-                    allBlocks: workspace.getAllBlocks().length
-                });
-
-                // XMLの生成
-                const xml = Blockly.Xml.workspaceToDom(workspace);
-
-                // 名前空間の設定を確認
-                if (!xml.hasAttribute('xmlns')) {
-                    xml.setAttribute('xmlns', 'https://developers.google.com/blockly/xml');
-                }
-
-                // XMLテキストへの変換（整形して出力）
-                const xmlText = Blockly.Xml.domToPrettyText(xml);
-
-                if (!xmlText || xmlText.trim() === "") {
-                    throw new Error("XMLテキストの生成に失敗しました");
-                }
-
-                // クリップボードにコピー
-                navigator.clipboard.writeText(xmlText).then(() => {
-                    alert("XMLをクリップボードにコピーしました");
-                });
-
-            } catch (e) {
-                console.error("エクスポートエラーの詳細:", e);
-                alert("エクスポート失敗: " + e.message);
-            }
-        });
-
-        document.getElementById('importButton').addEventListener('click', () => {
-            const xmlText = myPrompt("ブロックのインポート(XMLを貼り付けてください):");
-            if (xmlText) {
-                try {
-                    // XML構文の事前検証
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(xmlText, "text/xml");
-                    if (doc.getElementsByTagName("parsererror").length > 0) {
-                        throw new Error("XMLの形式が不正です");
-                    }
-
-                    console.log("Importing XML text:", xmlText);
-                    const xmlDom = textToDom(xmlText);
-                    console.log("Generated DOM object:", xmlDom);
-
-                    // ブロック定義の存在チェック
-                    const blockTypes = xmlDom.getElementsByTagName("block");
-                    for (let block of blockTypes) {
-                        const type = block.getAttribute("type");
-                        if (!Blockly.Blocks[type]) {
-                            throw new Error(`未定義のブロックタイプ: ${type}`);
-                        }
-                    }
-
-                    workspace.clear();
-                    console.log("Workspace cleared. Now calling domToWorkspace...");
-                    domToWorkspace(xmlDom, workspace);
-                    console.log("Import completed successfully.");
-                } catch (e) {
-                    console.error("Import error:", e);
-                    alert("インポート失敗: " + e.message);
-                }
-            }
-        });
-
-        // 1始まり配列モードの切替イベント
-        document.getElementById('oneBasedCheckbox').addEventListener('change', function () {
-            window.oneBasedMode = this.checked;
-        });
-
-        // 実行中止＆出力クリアボタンのイベント
-        document.getElementById('clearButton').addEventListener('click', () => {
-            // Interpreterの実行を中止
-            if (window.myInterpreter) {
-                window.myInterpreter = null;
-            }
-            // 出力エリアと内部状態のクリア
-            displayOutput("");
-            document.getElementById('stateDiv').innerHTML = "";
-            previousDebugVars = {};
             window.debugVars = {};
-        });
 
-        //==============================================
-        // スコープ管理機能 (関数処理の強化)
-        //==============================================
-        // インタプリタの関数スコープ管理を強化
-        function enhanceInterpreterScope(interpreter) {
-            // スコープスタックを初期化
-            interpreter.scopeStack = [];
-            
-            // スコープ作成時のフック
-            const originalCreateScope = interpreter.createScope;
-            interpreter.createScope = function(node, parentScope) {
-                const newScope = originalCreateScope.call(this, node, parentScope);
-                // 新しいスコープのコンテキストを保存
-                if (node && node.type === 'FunctionDeclaration') {
-                    interpreter.scopeStack.push({
-                        name: node.id ? node.id.name : '匿名関数',
-                        scope: newScope
-                    });
+            const ORDER_ATOMIC = 0;
+            const ORDER_NONE = 99;
+            const ORDER_ASSIGNMENT = 2;
+            const ORDER_FUNCTION_CALL = 2;
+            const ORDER_MULTIPLICATION = 5;
+            const ORDER_DIVISION = 5;
+            const ORDER_MODULUS = 5;
+            const ORDER_ADDITION = 6;
+            const ORDER_SUBTRACTION = 6;
+            const ORDER_LOGICAL_NOT = 4;
+            const ORDER_LOGICAL_AND = 11;
+            const ORDER_LOGICAL_OR = 12;
+            const ORDER_RELATIONAL = 8;
+
+            //==============================================
+            // Utility Functions
+            //==============================================
+            function myPrompt(msg) {
+                try {
+                    const result = window.prompt(msg);
+                    return result === null || result.trim() === '' ? "0" : result;
+                } catch (e) {
+                    console.error("Input error:", e);
+                    return "0";
                 }
-                return newScope;
-            };
-            
-            // スコープ破棄時のフック
-            const originalPopScope = interpreter.popScope;
-            interpreter.popScope = function() {
-                // スコープスタックからも取り除く
-                if (interpreter.scopeStack.length > 0 && 
-                    interpreter.scopeStack[interpreter.scopeStack.length - 1].scope === interpreter.getScope()) {
-                    interpreter.scopeStack.pop();
-                }
-                return originalPopScope.call(this);
-            };
-        }
+            }
 
-        //==============================================
-        // Interpreter 初期化
-        //==============================================
-        function initInterpreter(interpreter, globalObject) {
-            // 外部入力
-            interpreter.setProperty(
-                globalObject,
-                'myPrompt',
-                interpreter.createNativeFunction(function (msg) {
-                    return myPrompt(interpreter.pseudoToNative(msg));
-                })
-            );
-
-            // 出力
-            const wrapperDisplay = function (text) {
-                displayOutput(text ? text.toString() : "");
+            window.nativeLog = function (varName, value) {
+                window.debugVars[varName] = value;
             };
-            interpreter.setProperty(
-                globalObject,
-                'displayOutput',
-                interpreter.createNativeFunction(wrapperDisplay)
-            );
 
-            // 2進表示
-            interpreter.setProperty(
-                globalObject,
-                'displayBinary',
-                interpreter.createNativeFunction(function (num) {
-                    displayBinary(num || 0);
-                })
-            );
-            
-            // 配列アクセス
-            interpreter.setProperty(
-                globalObject,
-                'safeArrayAccess',
-                interpreter.createNativeFunction(function (arr, idx) {
-                    return safeArrayAccess(arr, idx);
-                })
-            );
-            
-            interpreter.setProperty(
-                globalObject,
-                'safeArrayAccess2d',
-                interpreter.createNativeFunction(function (arr, i, j) {
-                    return safeArrayAccess2d(arr, i, j);
-                })
-            );
-            
-            // ブレークポイント
-            interpreter.setProperty(
-                globalObject,
-                'checkBreakpoint',
-                interpreter.createNativeFunction(function () {
-                    if (!ignoreBreakpoints) {
-                        myInterpreter.paused_ = true;
-                    }
-                })
-            );
-            
-            // nativeLog() を Interpreter 内に登録
-            interpreter.setProperty(
-                globalObject,
-                'nativeLog',
-                interpreter.createNativeFunction(function (varName, value) {
-                    window.nativeLog(varName, interpreter.pseudoToNative(value));
-                })
-            );
-            
-            // 関数の状態追跡を改善 - 関数実行時には関数名と引数をデバッグ情報に記録
-            const originalFunctionCall = interpreter.functionCall;
-            interpreter.functionCall = function(func, funcThis, args) {
-                // 関数名を取得（可能な場合）
-                let funcName = "匿名関数";
-                if (func.node && func.node.type === 'FunctionDeclaration' && func.node.id) {
-                    funcName = func.node.id.name;
-                }
-                
-                // 引数のデバッグ表示
-                if (args && args.length > 0) {
-                    const argsValues = [];
-                    for (let i = 0; i < args.length; i++) {
-                        argsValues.push(interpreter.pseudoToNative(args[i]));
-                    }
-                    // 関数呼び出し情報をログに追加（デバッグのため）
-                    const callInfo = "<div class='function-call'>関数呼び出し: " + funcName + "(" + argsValues.join(", ") + ")</div>";
-                    displayOutput(callInfo);
+            function displayOutput(text, isError = false) {
+                const outputDiv = document.getElementById('outputDiv');
+                const line = document.createElement('div');
+                if (isError) {
+                    line.className = 'error-output';
+                    line.textContent = text;
                 } else {
-                    const callInfo = "<div class='function-call'>関数呼び出し: " + funcName + "()</div>";
-                    displayOutput(callInfo);
+                    line.innerHTML = text;
                 }
-                
-                // 元の関数を呼び出す
-                const result = originalFunctionCall.call(this, func, funcThis, args);
-                
-                // 戻り値をログに追加（デバッグのため）
-                if (result !== undefined) {
-                    const returnValue = interpreter.pseudoToNative(result);
-                    const returnInfo = "<div class='function-return'>関数 " + funcName + " の戻り値: " + returnValue + "</div>";
-                    displayOutput(returnInfo);
+                outputDiv.appendChild(line);
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+            }
+
+            function displayBinary(num) {
+                const bin = Number(num).toString(2);
+                displayOutput(bin);
+            }
+
+            function setRunStatus(message, statusClass = '') {
+                const statusDiv = document.getElementById('runStatusDiv');
+                statusDiv.textContent = message;
+                statusDiv.className = 'runStatusDiv'; // Reset classes
+                if (statusClass) {
+                    statusDiv.classList.add(statusClass);
                 }
-                
-                return result;
+            }
+
+            //==============================================
+            // Safe Array Access (with 1-based index handling)
+            //==============================================
+            function safeArrayAccess(arr, idx) {
+                const nativeArr = myInterpreter ? myInterpreter.pseudoToNative(arr) : arr;
+                const originalIdx = idx;
+                if (oneBasedMode) { idx = idx - 1; }
+
+                if (!Array.isArray(nativeArr)) {
+                    const msg = `エラー: ${nativeArr} は配列ではありません。`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                if (idx < 0 || idx >= nativeArr.length) {
+                    const msg = `エラー: 配列の範囲外アクセス (インデックス: ${originalIdx})`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                return nativeArr[idx];
+            }
+
+            function safeArrayAccess2d(arr, i, j) {
+                const nativeArr = myInterpreter ? myInterpreter.pseudoToNative(arr) : arr;
+                const originalI = i, originalJ = j;
+                if (oneBasedMode) { i = i - 1; j = j - 1; }
+
+                if (!Array.isArray(nativeArr)) {
+                    const msg = `エラー: ${nativeArr} は2次元配列ではありません。`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                if (i < 0 || i >= nativeArr.length) {
+                    const msg = `エラー: 2次元配列の1次元目の範囲外 (インデックス: ${originalI})`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                if (!Array.isArray(nativeArr[i])) {
+                    const msg = `エラー: ${nativeArr[i]} は配列ではありません。`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                if (j < 0 || j >= nativeArr[i].length) {
+                    const msg = `エラー: 2次元配列の2次元目の範囲外 (インデックス: ${originalJ})`;
+                    displayOutput(msg, true);
+                    throw new Error(msg);
+                }
+                return nativeArr[i][j];
+            }
+
+            //==============================================
+            // Blockly Block Definitions and Generators
+            //==============================================
+            Blockly.defineBlocksWithJsonArray([
+                { "type": "assignment", "message0": "%1 = %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数に値を代入する" },
+                { "type": "number_literal", "message0": "%1", "args0": [{ "type": "field_number", "name": "NUM", "value": 0 }], "output": "Number", "colour": 230, "tooltip": "数値を入力する" },
+                { "type": "string_literal", "message0": "「%1」", "args0": [{ "type": "field_input", "name": "TEXT", "text": "テキスト" }], "output": "String", "colour": 230, "tooltip": "文字列を入力する" },
+                { "type": "external_input", "message0": "【外部からの入力】", "output": null, "colour": 160, "tooltip": "ユーザーからの入力を受け取る" },
+                { "type": "variable_access", "message0": "変数 %1", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }], "output": null, "colour": 230, "tooltip": "変数の値を取得する" },
+                { "type": "array_assignment_1d", "message0": "%1 [ %2 ] = %3", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "1次元配列の要素に値を代入する" },
+                { "type": "array_assignment_2d", "message0": "%1 [ %2, %3 ] = %4", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列の要素に値を代入する" },
+                { "type": "array_assignment_full", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "87,45,72,100" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "配列全体に値を代入する" },
+                { "type": "array_assignment_full_2d", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "1,2;3,4" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列全体に値を代入する（行はセミコロン、要素はカンマ区切り）" },
+                { "type": "array_access_1d", "message0": "%1 [ %2 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }], "output": null, "colour": 260, "tooltip": "1次元配列の要素を参照する" },
+                { "type": "array_access_2d", "message0": "%1 [ %2, %3 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }], "output": null, "colour": 260, "tooltip": "2次元配列の要素を参照する" },
+                { "type": "arithmetic", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Number" }, { "type": "field_dropdown", "name": "OP", "options": [["+", "+"], ["-", "-"], ["×", "*"], ["/", "/"], ["÷", "÷"], ["%", "%"]] }, { "type": "input_value", "name": "B", "check": "Number" }], "inputsInline": true, "output": "Number", "colour": 230, "tooltip": "算術演算" },
+                { "type": "comparison", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A" }, { "type": "field_dropdown", "name": "OP", "options": [["=", "==="], ["≠", "!=="], [">", ">"], [">=", ">="], ["<", "<"], ["<=", "<="]] }, { "type": "input_value", "name": "B" }], "output": "Boolean", "colour": 210, "tooltip": "比較演算子" },
+                { "type": "logic_operation_jp", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Boolean" }, { "type": "field_dropdown", "name": "OP", "options": [["かつ", "&&"], ["または", "||"]] }, { "type": "input_value", "name": "B", "check": "Boolean" }], "output": "Boolean", "colour": 210, "tooltip": "論理演算子（and/or）" },
+                { "type": "logic_negate_jp", "message0": "でない %1", "args0": [{ "type": "input_value", "name": "BOOL", "check": "Boolean" }], "output": "Boolean", "colour": 210, "tooltip": "論理否定" },
+                { "type": "if_statement", "message0": "もし %1 ならば\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if文" },
+                { "type": "if_else_statement", "message0": "もし %1 ならば\n%2\nそうでなければ\n%3", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO0" }, { "type": "input_statement", "name": "ELSE" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if-else文" },
+                { "type": "while_loop", "message0": "%1 の間、繰り返す\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "whileループ" },
+                { "type": "do_while_loop", "message0": "繰り返し\n%1\nを、%2 になるまで実行する", "args0": [{ "type": "input_statement", "name": "DO" }, { "type": "input_value", "name": "CONDITION", "check": "Boolean" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "後判定ループ" },
+                { "type": "for_loop", "message0": "%1 を %2 から %3 まで %4 ずつ増やしながら、繰り返す\n%5", "args0": [{ "type": "field_input", "name": "VAR", "text": "i" }, { "type": "input_value", "name": "FROM", "check": "Number" }, { "type": "input_value", "name": "TO", "check": "Number" }, { "type": "input_value", "name": "STEP", "check": "Number" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "forループ" },
+                { "type": "inc_dec", "message0": "%1 を %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "field_dropdown", "name": "OP", "options": [["1 増やす", "+1"], ["1 減らす", "-1"]] }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数のインクリメント/デクリメント" },
+                { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
+                { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
+                { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
+                { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
+                { "type": "simple_display", "message0": "表示する %1", "args0": [{ "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "１つの値を表示する" },
+                { "type": "display", "message0": "表示項目", "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" },
+                { "type": "breakpoint", "message0": "ブレークポイント %1", "args0": [{ "type": "input_value", "name": "NUMBER", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 0, "tooltip": "指定した番号のブレークポイントで処理を一時停止する" }
+            ]);
+
+            Blockly.Blocks['display_mutator_container'] = {
+                init: function () { this.appendDummyInput().appendField("表示項目"); this.appendStatementInput("STACK"); this.setColour(160); this.setTooltip(""); this.contextMenu = false; }
             };
-        }
+            Blockly.Blocks['display_mutator_item'] = {
+                init: function () { this.appendDummyInput().appendField("項目"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(160); this.setTooltip(""); this.contextMenu = false; }
+            };
+            const displayMutator = {
+                mutationToDom: function () { const container = document.createElement('mutation'); container.setAttribute('items', this.itemCount_); return container; },
+                domToMutation: function (xmlElement) { this.itemCount_ = parseInt(xmlElement.getAttribute('items'), 10) || 0; this.updateShape_(); },
+                decompose: function (workspace) { const containerBlock = workspace.newBlock('display_mutator_container'); containerBlock.initSvg(); let connection = containerBlock.getInput('STACK').connection; for (let i = 0; i < this.itemCount_; i++) { const itemBlock = workspace.newBlock('display_mutator_item'); itemBlock.initSvg(); connection.connect(itemBlock.previousConnection); connection = itemBlock.nextConnection; } return containerBlock; },
+                compose: function (containerBlock) { let itemBlock = containerBlock.getInputTargetBlock('STACK'); const connections = []; while (itemBlock) { connections.push(itemBlock.valueConnection_); itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock(); } for (let i = 0; i < this.itemCount_; i++) { const connection = this.getInput('ADD' + i)?.connection.targetConnection; if (connection && connections.indexOf(connection) == -1) { connection.disconnect(); } } this.itemCount_ = connections.length; this.updateShape_(); for (let i = 0; i < this.itemCount_; i++) { if (connections[i]) { this.getInput('ADD' + i).connection.connect(connections[i]); } } },
+                saveConnections: function (containerBlock) { let itemBlock = containerBlock.getInputTargetBlock('STACK'); let i = 0; while (itemBlock) { const input = this.getInput('ADD' + i); itemBlock.valueConnection_ = input && input.connection.targetConnection; i++; itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock(); } }
+            };
+            Blockly.Extensions.registerMutator('display_mutator', displayMutator, function () { this.itemCount_ = 2; this.updateShape_(); }, ['display_mutator_item']);
+            Blockly.Blocks['display'] = {
+                init: function () { this.jsonInit({ "message0": "表示項目", "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" }); },
+                updateShape_: function () { for (let i = 0; this.getInput('ADD' + i); i++) { this.removeInput('ADD' + i); } if (this.getInput('END')) this.removeInput('END'); if (this.getInput('EMPTY')) this.removeInput('EMPTY'); if (this.itemCount_ == 0) { this.appendDummyInput('EMPTY').appendField("表示する"); } else { for (let i = 0; i < this.itemCount_; i++) { if (i === 0) { this.appendValueInput('ADD' + i).setCheck(null).appendField(""); } else { this.appendValueInput('ADD' + i).setCheck(null).appendField("と"); } } this.appendDummyInput('END').appendField("を表示する"); } }
+            };
 
-        //==============================================
-        // 内部状態のデバッグ出力（ビジュアル表示）
-        // 変数・配列の「前回値」と比較して変更された箇所をハイライト
-        //==============================================
-        let previousDebugVars = {}; // 前回のステップ時点の状態を保存
-        function updateStateDisplayVisual() {
-            const stateDiv = document.getElementById('stateDiv');
-            stateDiv.innerHTML = ""; // クリア
+            //==============================================
+            // JavaScript Code Generators for Blocks
+            //==============================================
+            Blockly.JavaScript['assignment'] = function (block) { const varName = block.getFieldValue('VAR'); const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; return `${varName} = ${value};\nnativeLog('${varName}', ${varName});\n`; };
+            Blockly.JavaScript['number_literal'] = (block) => [String(block.getFieldValue('NUM')), ORDER_ATOMIC];
+            Blockly.JavaScript['string_literal'] = (block) => [JSON.stringify(block.getFieldValue('TEXT')), ORDER_ATOMIC];
+            Blockly.JavaScript['external_input'] = () => ["myPrompt('外部からの入力')", ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['variable_access'] = (block) => [block.getFieldValue('VAR'), ORDER_ATOMIC];
+            Blockly.JavaScript['array_assignment_1d'] = function (block) { const arr = block.getFieldValue('ARRAY'); let idx = Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'; const val = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; let code = `${arr}[${oneBasedMode ? `(${idx} - 1)` : idx}] = ${val};\n`; code += `nativeLog('${arr}', ${arr});\n`; return code; };
+            Blockly.JavaScript['array_assignment_2d'] = function (block) { const arr = block.getFieldValue('ARRAY'); let i = Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'; let j = Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'; const val = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; const index1 = oneBasedMode ? `(${i} - 1)` : i; const index2 = oneBasedMode ? `(${j} - 1)` : j; let code = `${arr}[${index1}][${index2}] = ${val};\n`; code += `nativeLog('${arr}', ${arr});\n`; return code; };
+            Blockly.JavaScript['array_assignment_full'] = function (block) { const arr = block.getFieldValue('ARRAY'); const elements = block.getFieldValue('ELEMENTS'); const splitted = elements.replace(/[{}]/g, '').split(',').map(s => { const trimmed = s.trim(); return isNaN(Number(trimmed)) ? JSON.stringify(trimmed) : Number(trimmed); }); return `${arr} = [${splitted.join(', ')}];\nnativeLog('${arr}', ${arr});\n`; };
+            Blockly.JavaScript['array_assignment_full_2d'] = function (block) { const arr = block.getFieldValue('ARRAY'); const elementsText = block.getFieldValue('ELEMENTS') || ''; const rows = elementsText.split(';').map(rowText => { const elements = rowText.split(',').map(e => { const trimmed = e.trim(); return isNaN(Number(trimmed)) ? JSON.stringify(trimmed) : Number(trimmed); }); return `[${elements.join(',')}]`; }); return `${arr} = [${rows.join(',')}];\nnativeLog('${arr}', ${arr});\n`; };
+            Blockly.JavaScript['array_access_1d'] = (block) => [`safeArrayAccess(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['array_access_2d'] = (block) => [`safeArrayAccess2d(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['arithmetic'] = function (block) { if (block.getFieldValue('OP') === '÷') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.floor(${a} / ${b})`, ORDER_FUNCTION_CALL]; } const OPERATORS = { '+': [' + ', ORDER_ADDITION], '-': [' - ', ORDER_SUBTRACTION], '*': [' * ', ORDER_MULTIPLICATION], '/': [' / ', ORDER_DIVISION], '%': [' % ', ORDER_MODULUS], }; const tuple = OPERATORS[block.getFieldValue('OP')]; const operator = tuple[0]; const order = tuple[1]; const argument0 = Blockly.JavaScript.valueToCode(block, 'A', order) || '0'; const argument1 = Blockly.JavaScript.valueToCode(block, 'B', order) || '0'; const code = argument0 + operator + argument1; return [code, order]; };
+            Blockly.JavaScript['comparison'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'A', ORDER_RELATIONAL) || '0'} ${block.getFieldValue('OP')} ${Blockly.JavaScript.valueToCode(block, 'B', ORDER_RELATIONAL) || '0'})`, ORDER_RELATIONAL];
+            Blockly.JavaScript['logic_operation_jp'] = (block) => { const op = block.getFieldValue('OP'); const order = op === '&&' ? ORDER_LOGICAL_AND : ORDER_LOGICAL_OR; return [`(${Blockly.JavaScript.valueToCode(block, 'A', order) || 'false'} ${op} ${Blockly.JavaScript.valueToCode(block, 'B', order) || 'false'})`, order]; };
+            Blockly.JavaScript['logic_negate_jp'] = (block) => [`(!${Blockly.JavaScript.valueToCode(block, 'BOOL', ORDER_LOGICAL_NOT) || 'false'})`, ORDER_LOGICAL_NOT];
+            Blockly.JavaScript['if_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
+            Blockly.JavaScript['if_else_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO0')}} else {\n${Blockly.JavaScript.statementToCode(block, 'ELSE')}}\n`;
+            Blockly.JavaScript['while_loop'] = (block) => `while (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
+            Blockly.JavaScript['do_while_loop'] = (block) => `do {\n${Blockly.JavaScript.statementToCode(block, 'DO')}} while (!(${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}));\n`;
+            Blockly.JavaScript['for_loop'] = function (block) { const varName = block.getFieldValue('VAR'); const fromVal = Blockly.JavaScript.valueToCode(block, 'FROM', ORDER_ASSIGNMENT) || '0'; const toVal = Blockly.JavaScript.valueToCode(block, 'TO', ORDER_RELATIONAL) || '0'; const stepVal = Blockly.JavaScript.valueToCode(block, 'STEP', ORDER_ASSIGNMENT) || '1'; const branch = Blockly.JavaScript.statementToCode(block, 'DO'); let operator = '<='; const stepBlock = block.getInputTargetBlock('STEP'); if (stepBlock && stepBlock.type === 'number_literal') { const stepNum = Number(stepBlock.getFieldValue('NUM')); if (stepNum < 0) { operator = '>='; } } else if (stepVal.trim().startsWith('-')) { operator = '>='; } const loopCode = `for (${varName} = ${fromVal}; ${varName} ${operator} ${toVal}; ${varName} += ${stepVal}) {\n  nativeLog('${varName}', ${varName});\n${branch}}\n`; const finalLog = `nativeLog('${varName}', ${varName});\n`; return loopCode + finalLog; };
+            Blockly.JavaScript['inc_dec'] = (block) => { const varName = block.getFieldValue('VAR'); const op = block.getFieldValue('OP') === '+1' ? '++' : '--'; return `${varName}${op};\nnativeLog('${varName}', ${varName});\n`; };
+            Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
+            Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['display_binary'] = (block) => `displayBinary(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'});\n`;
+            Blockly.JavaScript['simple_display'] = (block) => `displayOutput(${Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'});\n`;
+            Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } return `displayOutput([${parts.join(', ')}].join(''));\n`; };
+            Blockly.JavaScript['breakpoint'] = function (block) { const number = Blockly.JavaScript.valueToCode(block, 'NUMBER', ORDER_NONE) || 'null'; return `checkBreakpoint(${number});\n`; };
 
-            // window.debugVars をディープコピーしておく（次回用）
-            let currentCopy = JSON.parse(JSON.stringify(window.debugVars));
+            //==============================================
+            // Interpreter Initialization
+            //==============================================
+            function initInterpreter(interpreter, globalObject) {
+                function createNative(func) { return interpreter.createNativeFunction(func); }
+                interpreter.setProperty(globalObject, 'displayOutput', createNative(text => displayOutput(text !== null && text !== undefined ? text.toString() : "")));
+                interpreter.setProperty(globalObject, 'displayBinary', createNative(num => displayBinary(num || 0)));
+                interpreter.setProperty(globalObject, 'safeArrayAccess', createNative((arr, idx) => safeArrayAccess(arr, idx)));
+                interpreter.setProperty(globalObject, 'safeArrayAccess2d', createNative((arr, i, j) => safeArrayAccess2d(arr, i, j)));
+                interpreter.setProperty(globalObject, 'nativeLog', createNative((varName, value) => window.nativeLog(varName, interpreter.pseudoToNative(value))));
+                interpreter.setProperty(globalObject, 'myPrompt', createNative(msg => myPrompt(interpreter.pseudoToNative(msg))));
+                interpreter.setProperty(globalObject, 'checkBreakpoint', createNative((number) => { if (!ignoreBreakpoints) { myInterpreter.paused_ = true; myInterpreter.breakpointNumber = number; } }));
+                const originalFuncCall = interpreter.functionCall;
+                interpreter.functionCall = function (func, funcThis, args) { let funcName = (func.node && func.node.id) ? func.node.id.name : "匿名関数"; const argVals = args ? args.map(a => interpreter.pseudoToNative(a)) : []; displayOutput(`<div class='function-call'>関数呼び出し: ${funcName}(${argVals.join(", ")})</div>`); const result = originalFuncCall.call(this, func, funcThis, args); if (result !== undefined && func.node.type !== 'FunctionDeclaration') { const returnVal = interpreter.pseudoToNative(result); displayOutput(`<div class='function-return'>関数 ${funcName} の戻り値: ${returnVal}</div>`); } return result; };
+            }
 
-            // 各変数ごとに表示
-            for (const key in window.debugVars) {
-                if (window.debugVars.hasOwnProperty(key)) {
-                    const container = document.createElement('div');
-                    container.className = "var-container";
+            //==============================================
+            // State Visualization
+            //==============================================
+            function updateStateDisplayVisual() { const stateDiv = document.getElementById('stateDiv'); stateDiv.innerHTML = ""; let currentCopy = JSON.parse(JSON.stringify(window.debugVars)); for (const key in window.debugVars) { const container = document.createElement('div'); container.className = "var-container"; const title = document.createElement('div'); title.className = "var-title"; title.textContent = key; container.appendChild(title); const value = window.debugVars[key]; const oldValue = previousDebugVars[key]; if (Array.isArray(value)) { if (Array.isArray(value[0])) { const table = document.createElement('table'); table.className = 'array-table'; const thead = table.createTHead().insertRow(); thead.insertCell(); for (let j = 0; j < value[0].length; j++) { const th = document.createElement('th'); th.textContent = oneBasedMode ? j + 1 : j; thead.appendChild(th); } const tbody = table.createTBody(); for (let i = 0; i < value.length; i++) { const tr = tbody.insertRow(); const th = document.createElement('th'); th.textContent = oneBasedMode ? i + 1 : i; tr.appendChild(th); for (let j = 0; j < value[i].length; j++) { const td = tr.insertCell(); td.textContent = value[i][j]; if (!oldValue || !Array.isArray(oldValue) || !oldValue[i] || value[i][j] !== oldValue[i][j]) { td.classList.add('highlight'); } } } container.appendChild(table); } else { const arrayBox = document.createElement('div'); arrayBox.className = "array-box"; for (let i = 0; i < value.length; i++) { const elemDiv = document.createElement('div'); elemDiv.className = "array-element"; elemDiv.innerHTML = `<div class="array-index">${oneBasedMode ? i + 1 : i}</div>${value[i]}`; if (!oldValue || !Array.isArray(oldValue) || value[i] !== oldValue[i]) { elemDiv.classList.add('highlight'); } arrayBox.appendChild(elemDiv); } container.appendChild(arrayBox); } } else { const textDiv = document.createElement('div'); textDiv.textContent = value; if (value !== oldValue) { textDiv.classList.add('highlight'); } container.appendChild(textDiv); } stateDiv.appendChild(container); } previousDebugVars = currentCopy; }
 
-                    const title = document.createElement('div');
-                    title.className = "var-title";
-                    title.textContent = key;
-                    container.appendChild(title);
+            //==============================================
+            // Execution Control
+            //==============================================
+            function resetExecution() { if (myInterpreter) myInterpreter = null; document.getElementById('outputDiv').innerHTML = ""; document.getElementById('stateDiv').innerHTML = ""; window.debugVars = {}; previousDebugVars = {}; setRunStatus("待機中"); }
+            function prepareInterpreter() { if (myInterpreter) return true; resetExecution(); const allVariables = workspace.getAllVariables(); const varNames = allVariables.map(v => v.name); const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : ''; const blockCode = Blockly.JavaScript.workspaceToCode(workspace); const finalCode = declarationString + blockCode; setRunStatus("実行中..."); try { myInterpreter = new Interpreter(finalCode, initInterpreter); window.myInterpreter = myInterpreter; return true; } catch (e) { setRunStatus("コード生成エラー", "status-error"); displayOutput("インタプリタ生成エラー: " + e.message, true); console.error("Final code passed to interpreter:", finalCode); console.error(e); return false; } }
+            function runToNextBreakpoint() { if (!prepareInterpreter()) return; ignoreBreakpoints = false; setRunStatus("ステップ実行中..."); let stepCount = 0; let finished = false; while (true) { if (stepCount++ > EXECUTION_TIMEOUT_STEPS) { displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true); setRunStatus("タイムアウト", "status-error"); myInterpreter = null; return; } try { if (!myInterpreter.step()) { finished = true; break; } if (myInterpreter.paused_) { break; } } catch (e) { displayOutput("実行エラー: " + e.message, true); setRunStatus("エラー発生", "status-error"); myInterpreter = null; return; } } updateStateDisplayVisual(); if (finished) { setRunStatus("プログラム終了", "status-success"); document.getElementById('executionFinishedModal').style.display = 'flex'; } else if (myInterpreter && myInterpreter.paused_) { const bpNum = myInterpreter.breakpointNumber; myInterpreter.paused_ = false; myInterpreter.breakpointNumber = null; const statusText = (bpNum !== null && bpNum !== undefined) ? `ブレークポイント ${bpNum}` : 'ブレークポイント'; setRunStatus(statusText); } }
+            function runAll() { if (!prepareInterpreter()) return; ignoreBreakpoints = true; setRunStatus("一括実行中..."); let stepCount = 0; const BATCH_SIZE = 2000; const runner = () => { try { for (let i = 0; i < BATCH_SIZE; i++) { if (stepCount++ > EXECUTION_TIMEOUT_STEPS) { displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true); setRunStatus("タイムアウト", "status-error"); myInterpreter = null; return; } if (!myInterpreter || !myInterpreter.step()) { updateStateDisplayVisual(); setRunStatus("プログラム終了", "status-success"); myInterpreter = null; return; } } setTimeout(runner, 0); } catch (e) { displayOutput("実行エラー: " + e.message, true); updateStateDisplayVisual(); setRunStatus("エラー発生", "status-error"); myInterpreter = null; } }; runner(); }
 
-                    const value = window.debugVars[key];
-                    const oldValue = previousDebugVars[key];
+            //==============================================
+            // Pane Resizing Logic
+            //==============================================
+            function setupResizer(resizerEl, isVertical = true) { let x = 0, y = 0; let prevSiblingHeight = 0, prevSiblingWidth = 0; const mouseDownHandler = function (e) { e.preventDefault(); x = e.clientX; y = e.clientY; const prevSibling = resizerEl.previousElementSibling; if (isVertical) { prevSiblingWidth = prevSibling.getBoundingClientRect().width; } else { prevSiblingHeight = prevSibling.getBoundingClientRect().height; } document.addEventListener('mousemove', mouseMoveHandler); document.addEventListener('mouseup', mouseUpHandler); }; const mouseMoveHandler = function (e) { const prevSibling = resizerEl.previousElementSibling; if (isVertical) { const dx = e.clientX - x; const newWidth = prevSiblingWidth + dx; if (newWidth > 100) { prevSibling.style.flex = `0 0 ${newWidth}px`; } } else { const dy = e.clientY - y; const newHeight = prevSiblingHeight + dy; if (newHeight > 50) { prevSibling.style.flex = `0 0 ${newHeight}px`; } } window.dispatchEvent(new Event('resize')); }; const mouseUpHandler = function () { document.removeEventListener('mousemove', mouseMoveHandler); document.removeEventListener('mouseup', mouseUpHandler); }; resizerEl.addEventListener('mousedown', mouseDownHandler); }
 
-                    if (Array.isArray(value)) {
-                        // 2次元配列か判定（先頭要素が配列の場合）
-                        // updateStateDisplayVisual() 内の2次元配列表示処理（転置表示）
-                        if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
-                            const arrayBox = document.createElement('div');
-                            arrayBox.className = "array-box";
-                            // 列方向のループを外側に（表示レイアウトはそのまま）
-                            for (let c = 0; c < value[0].length; c++) {
-                                const colContainer = document.createElement('div');
-                                colContainer.className = "array-element-row";
-                                for (let r = 0; r < value.length; r++) {
-                                    const cellDiv = document.createElement('div');
-                                    cellDiv.className = "array-element";
-                                    cellDiv.textContent = value[r][c];
+            //==============================================
+            // Import / Export Logic
+            //==============================================
+            function exportBlocks() { try { const xml = Blockly.Xml.workspaceToDom(workspace); const xmlText = Blockly.Xml.domToPrettyText(xml); const a = document.createElement('a'); a.href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(xmlText); a.download = 'dncl_program.xml'; a.click(); } catch (e) { alert("エクスポート失敗: " + e.message); console.error(e); } }
+            function importBlocks() { document.getElementById('importFile').click(); }
+            function loadBlocksFromFile(file) { if (!file) return; const reader = new FileReader(); reader.onload = function (e) { const xmlText = e.target.result; try { const xml = Blockly.utils.xml.textToDom(xmlText); workspace.clear(); Blockly.Xml.domToWorkspace(xml, workspace); } catch (e) { alert("インポート失敗: ファイルが不正です。\n" + e.message); console.error(e); } }; reader.readAsText(file); }
 
-                                    // インデックス表示を行・列順に修正
-                                    const idxDiv = document.createElement('div');
-                                    idxDiv.className = "array-index";
-                                    if (document.getElementById('oneBasedCheckbox').checked) {
-                                        idxDiv.textContent = "(" + (r + 1) + "," + (c + 1) + ")"; // 順序を反転
-                                    } else {
-                                        idxDiv.textContent = "(" + r + "," + c + ")"; // 順序を反転
-                                    }
-                                    cellDiv.appendChild(idxDiv);
+            //==============================================
+            // App Initialization
+            //==============================================
+            workspace = Blockly.inject('blocklyDiv', {
+                toolbox: document.getElementById('toolbox'),
+                scrollbars: true,
+                zoom: { controls: true, wheel: true }
+            });
 
-                                    // 差分チェックはそのまま
-                                    if (Array.isArray(oldValue) &&
-                                        oldValue.length > r &&
-                                        Array.isArray(oldValue[r]) &&
-                                        oldValue[r].length > c &&
-                                        oldValue[r][c] !== value[r][c]) {
-                                        cellDiv.classList.add('highlight');
-                                    }
-                                    colContainer.appendChild(cellDiv);
-                                }
-                                arrayBox.appendChild(colContainer);
-                            }
-                            container.appendChild(arrayBox);
-                        } else {
-                            // 1次元配列の場合（既存処理）
-                            const arrayBox = document.createElement('div');
-                            arrayBox.className = "array-box";
-                            const oldLength = (Array.isArray(oldValue)) ? oldValue.length : -1;
-                            for (let i = 0; i < value.length; i++) {
-                                const elemDiv = document.createElement('div');
-                                elemDiv.className = "array-element";
-                                elemDiv.textContent = value[i];
+            document.getElementById('runButton').addEventListener('click', runAll);
+            document.getElementById('stepButton').addEventListener('click', runToNextBreakpoint);
+            document.getElementById('resetButton').addEventListener('click', resetExecution);
+            document.getElementById('exportButton').addEventListener('click', exportBlocks);
+            document.getElementById('importButton').addEventListener('click', importBlocks);
+            document.getElementById('importFile').addEventListener('change', (e) => loadBlocksFromFile(e.target.files[0]));
+            document.getElementById('oneBasedCheckbox').addEventListener('change', (e) => { oneBasedMode = e.target.checked; });
 
-                                const idxDiv = document.createElement('div');
-                                idxDiv.className = "array-index";
-                                idxDiv.textContent = document.getElementById('oneBasedCheckbox').checked ? (i + 1) : i;
-                                elemDiv.appendChild(idxDiv);
+            const codeModal = document.getElementById('codeModal');
+            document.getElementById('showCodeButton').addEventListener('click', () => {
+                const allVariables = workspace.getAllVariables();
+                const varNames = allVariables.map(v => v.name);
+                const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : '';
+                const blockCode = Blockly.JavaScript.workspaceToCode(workspace);
+                const finalCode = declarationString + blockCode;
+                document.getElementById('jsCodeDiv').textContent = finalCode;
+                codeModal.style.display = 'flex';
+            });
+            document.getElementById('modalCloseButton').addEventListener('click', () => { codeModal.style.display = 'none'; });
+            codeModal.addEventListener('click', (e) => { if (e.target === codeModal) { codeModal.style.display = 'none'; } });
 
-                                if (Array.isArray(oldValue)
-                                    && i < oldValue.length
-                                    && oldValue[i] !== value[i]) {
-                                    elemDiv.classList.add('highlight');
-                                }
-                                if (i >= oldLength) {
-                                    elemDiv.classList.add('highlight');
-                                }
+            const executionFinishedModal = document.getElementById('executionFinishedModal');
+            const executionFinishedModalCloseButton = document.getElementById('executionFinishedModalCloseButton');
+            executionFinishedModalCloseButton.addEventListener('click', () => { executionFinishedModal.style.display = 'none'; });
+            executionFinishedModal.addEventListener('click', (e) => { if (e.target === executionFinishedModal) { executionFinishedModal.style.display = 'none'; } });
 
-                                arrayBox.appendChild(elemDiv);
-                            }
-                            container.appendChild(arrayBox);
-                        }
-                    } else {
-                        // 配列以外の場合
-                        const textDiv = document.createElement('div');
-                        textDiv.textContent = value;
-                        if (value !== oldValue) {
-                            textDiv.classList.add('highlight');
-                        }
-                        container.appendChild(textDiv);
-                    }
-                    stateDiv.appendChild(container);
+            setupResizer(document.getElementById('resizerV'), true);
+            setupResizer(document.getElementById('resizerH'), false);
+
+            window.addEventListener('resize', () => Blockly.svgResize(workspace));
+
+            window.addEventListener('beforeunload', (event) => {
+                if (workspace.getAllBlocks(false).length > 0) {
+                    event.preventDefault();
+                    event.returnValue = ''; // Required for Chrome.
                 }
-            }
-            previousDebugVars = currentCopy;
-        }
-
-        // 実行状態の表示を更新
-        function setRunStatus(message) {
-            const runStatusDiv = document.getElementById('runStatusDiv');
-            runStatusDiv.textContent = message;
-        }
-
-        //==============================================
-        // ステップ実行 (次のブレークポイント or 終了まで)
-        //==============================================
-        let ignoreBreakpoints = false;
-        // オリジナルの関数を保存
-        const originalRunToNextBreakpoint = function runToNextBreakpoint() {
-            // 最初のステップ時(または再実行時)は Interpreter の再生成
-            if (!myInterpreter) {
-                const code = Blockly.JavaScript.workspaceToCode(workspace);
-                document.getElementById('outputDiv').innerHTML = "";
-                document.getElementById('stateDiv').innerHTML = "";
-                setRunStatus("ステップ実行中...");
-
-                // debugVars, previousDebugVars をクリア
-                window.debugVars = {};
-                previousDebugVars = {};
-
-                try {
-                    myInterpreter = new Interpreter(code, initInterpreter);
-                    window.myInterpreter = myInterpreter;
-                    // 新規追加: インタプリタにスコープ管理機能を追加
-                    enhanceInterpreterScope(myInterpreter);
-                } catch (e) {
-                    setRunStatus("インタプリタ生成エラー");
-                    alert("インタプリタ生成エラー: " + e);
-                    return;
-                }
-            }
-            ignoreBreakpoints = false;
-
-            // 実行
-            while (true) {
-                try {
-                    const ok = myInterpreter.step();
-                    if (!ok) {
-                        // 終了
-                        updateStateDisplayVisual();
-                        setRunStatus("プログラム終了");
-                        myInterpreter = null;
-                        window.myInterpreter = null;
-                        break;
-                    }
-                    if (myInterpreter.paused_) {
-                        // ブレークポイント到達
-                        myInterpreter.paused_ = false;
-                        updateStateDisplayVisual();
-                        setRunStatus("ブレークポイントに到達");
-                        break;
-                    }
-                } catch (e) {
-                    displayOutput("実行エラー: " + e);
-                    myInterpreter = null;
-                    window.myInterpreter = null;
-                    updateStateDisplayVisual();
-                    setRunStatus("エラー発生");
-                    break;
-                }
-            }
-            // while ループ終了後に Blockly の再描画処理を2回実施
-            if (workspace) {
-                setTimeout(() => {
-                    Blockly.svgResize(workspace);
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 50);
-                }, 50);
-            }
-        };
-
-        // 関数を置き換え
-        function runToNextBreakpoint() {
-            if (!myInterpreter) {
-                const code = Blockly.JavaScript.workspaceToCode(workspace);
-                document.getElementById('outputDiv').innerHTML = "";
-                document.getElementById('stateDiv').innerHTML = "";
-                setRunStatus("ステップ実行中...");
-
-                // debugVars, previousDebugVars をクリア
-                window.debugVars = {};
-                previousDebugVars = {};
-
-                try {
-                    myInterpreter = new Interpreter(code, initInterpreter);
-                    window.myInterpreter = myInterpreter;
-                    // スコープ管理機能の初期化
-                    enhanceInterpreterScope(myInterpreter);
-                } catch (e) {
-                    console.error("コード:", code);
-                    console.error("インタプリタエラー:", e);
-                    setRunStatus("インタプリタ生成エラー");
-                    alert("インタプリタ生成エラー: " + e);
-                    return;
-                }
-            }
-            
-            // 元のステップ実行関数を続ける（オーバーライドしない）
-            ignoreBreakpoints = false;
-            
-            // 実行
-            while (true) {
-                try {
-                    const ok = myInterpreter.step();
-                    if (!ok) {
-                        // 終了
-                        updateStateDisplayVisual();
-                        setRunStatus("プログラム終了");
-                        myInterpreter = null;
-                        window.myInterpreter = null;
-                        break;
-                    }
-                    if (myInterpreter.paused_) {
-                        // ブレークポイント到達
-                        myInterpreter.paused_ = false;
-                        updateStateDisplayVisual();
-                        setRunStatus("ブレークポイントに到達");
-                        break;
-                    }
-                } catch (e) {
-                    displayOutput("実行エラー: " + e);
-                    myInterpreter = null;
-                    window.myInterpreter = null;
-                    updateStateDisplayVisual();
-                    setRunStatus("エラー発生");
-                    break;
-                }
-            }
-            
-            // while ループ終了後に Blockly の再描画処理を2回実施
-            if (workspace) {
-                setTimeout(() => {
-                    Blockly.svgResize(workspace);
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 50);
-                }, 50);
-            }
-        }
-
-        //==============================================
-        // 一括実行 (ブレークポイント無視)
-        //==============================================
-        // オリジナルの関数を保存
-        const originalRunAll = function runAll() {
-            const code = Blockly.JavaScript.workspaceToCode(workspace);
-            document.getElementById('outputDiv').innerHTML = "";
-            document.getElementById('stateDiv').innerHTML = "";
-            setRunStatus("一括実行中...");
-
-            // debugVars, previousDebugVars をクリア
-            window.debugVars = {};
-            previousDebugVars = {};
+            });
 
             try {
-                myInterpreter = new Interpreter(code, initInterpreter);
-                window.myInterpreter = myInterpreter;
-                // 新規追加: インタプリタにスコープ管理機能を追加
-                enhanceInterpreterScope(myInterpreter);
-            } catch (e) {
-                setRunStatus("インタプリタ生成エラー");
-                alert("インタプリタ生成エラー: " + e);
-                return;
-            }
-            ignoreBreakpoints = true;
-            while (true) {
-                try {
-                    const ok = myInterpreter.step();
-                    if (!ok) {
-                        updateStateDisplayVisual();
-                        myInterpreter = null;
-                        window.myInterpreter = null;
-                        setRunStatus("プログラム終了");
-                        break;
-                    }
-                } catch (e) {
-                    displayOutput("実行エラー: " + e);
-                    myInterpreter = null;
-                    window.myInterpreter = null;
-                    updateStateDisplayVisual();
-                    setRunStatus("エラー発生");
-                    break;
+                const startXml = document.getElementById('startBlocks');
+                if (startXml.innerHTML.trim()) {
+                    Blockly.Xml.domToWorkspace(startXml, workspace);
                 }
-            }
-            // while ループ終了後に Blockly の再描画処理を2回実施
-            if (workspace) {
-                setTimeout(() => {
-                    Blockly.svgResize(workspace);
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 50);
-                }, 50);
-            }
-        };
-
-        // 関数を置き換え
-        function runAll() {
-            const code = Blockly.JavaScript.workspaceToCode(workspace);
-            document.getElementById('outputDiv').innerHTML = "";
-            document.getElementById('stateDiv').innerHTML = "";
-            setRunStatus("一括実行中...");
-
-            // debugVars, previousDebugVars をクリア
-            window.debugVars = {};
-            previousDebugVars = {};
-
-            try {
-                myInterpreter = new Interpreter(code, initInterpreter);
-                window.myInterpreter = myInterpreter;
-                // スコープ管理機能の初期化
-                enhanceInterpreterScope(myInterpreter);
             } catch (e) {
-                console.error("コード:", code);
-                console.error("インタプリタエラー:", e);
-                setRunStatus("インタプリタ生成エラー");
-                alert("インタプリタ生成エラー: " + e);
-                return;
+                console.error("Error loading start blocks:", e);
+                displayOutput("起動時のブロック読み込みエラー: " + e.message, true);
             }
-            
-            ignoreBreakpoints = true;
-            while (true) {
-                try {
-                    const ok = myInterpreter.step();
-                    if (!ok) {
-                        updateStateDisplayVisual();
-                        myInterpreter = null;
-                        window.myInterpreter = null;
-                        setRunStatus("プログラム終了");
-                        break;
-                    }
-                } catch (e) {
-                    displayOutput("実行エラー: " + e);
-                    myInterpreter = null;
-                    window.myInterpreter = null;
-                    updateStateDisplayVisual();
-                    setRunStatus("エラー発生");
-                    break;
-                }
-            }
-            
-            // while ループ終了後に Blockly の再描画処理を2回実施
-            if (workspace) {
-                setTimeout(() => {
-                    Blockly.svgResize(workspace);
-                    setTimeout(() => {
-                        Blockly.svgResize(workspace);
-                    }, 50);
-                }, 50);
-            }
-        }
 
-        //==============================================
-        // ボタン動作
-        //==============================================
-        document.getElementById('stepButton').addEventListener('click', () => {
-            runToNextBreakpoint();
+            workspace.scrollCenter();
         });
-        document.getElementById('runButton').addEventListener('click', () => {
-            runAll();
-        });
-        document.getElementById('fontSizeRange').addEventListener('input', function () {
-            const size = this.value;
-            document.getElementById('outputDiv').style.fontSize = size + "px";
-        });
-
     </script>
 </body>
 
