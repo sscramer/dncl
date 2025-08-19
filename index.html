@@ -558,8 +558,63 @@
         </category>
     </xml>
 
-    <!-- 起動時に読み込むブロック（空） -->
-    <xml id="startBlocks" style="display:none"></xml>
+    <!-- 起動時に読み込むブロック（サンプル） -->
+    <xml id="startBlocks" style="display:none">
+        <block type="procedures_defreturn" id="func_area" x="50" y="50">
+            <mutation>
+                <arg name="tate" varid="tate_id"></arg>
+                <arg name="yoko" varid="yoko_id"></arg>
+            </mutation>
+            <field name="NAME">keisan_menseki</field>
+            <comment pinned="false" h="80" w="160">この関数は四角形の面積を計算します。</comment>
+            <value name="RETURN">
+                <block type="arithmetic" id="multiply_area">
+                    <field name="OP">*</field>
+                    <value name="A">
+                        <block type="variables_get" id="get_tate">
+                            <field name="VAR">tate</field>
+                        </block>
+                    </value>
+                    <value name="B">
+                        <block type="variables_get" id="get_yoko">
+                            <field name="VAR">yoko</field>
+                        </block>
+                    </value>
+                </block>
+            </value>
+        </block>
+        <block type="variables_set" id="set_result" x="50" y="200">
+            <field name="VAR">menseki</field>
+            <value name="VALUE">
+                <block type="procedures_callreturn" id="call_area">
+                    <mutation name="keisan_menseki">
+                        <arg name="tate"></arg>
+                        <arg name="yoko"></arg>
+                    </mutation>
+                    <value name="ARG0">
+                        <block type="number_literal" id="arg_tate_val">
+                            <field name="NUM">10</field>
+                        </block>
+                    </value>
+                    <value name="ARG1">
+                        <block type="number_literal" id="arg_yoko_val">
+                            <field name="NUM">20</field>
+                        </block>
+                    </value>
+                </block>
+            </value>
+            <next>
+                <block type="simple_display" id="display_result">
+                    <field name="NEWLINE">TRUE</field>
+                    <value name="VALUE">
+                        <block type="variables_get" id="get_menseki">
+                            <field name="VAR">menseki</field>
+                        </block>
+                    </value>
+                </block>
+            </next>
+        </block>
+    </xml>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
