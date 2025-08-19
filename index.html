@@ -822,7 +822,6 @@
                 try {
                     window.debugVars = deepClone(snapshot.debugVars);
                     document.getElementById('outputDiv').innerHTML = snapshot.outputHtml;
-                    restoreGlobalScope(snapshot.globalScope);
 
                     updateStateDisplayVisual();
                     updateStepCounter();
@@ -944,9 +943,6 @@
                     // その他の状態を復元
                     newInterpreter.value = snapshot.interpreterState.value;
                     newInterpreter.done_ = snapshot.interpreterState.done;
-
-                    // グローバル変数も復元
-                    restoreGlobalScope(snapshot.globalScope);
 
                     // インタープリターを設定
                     myInterpreter = newInterpreter;
