@@ -1556,6 +1556,14 @@
              * プログラムを最後まで一括実行する
              */
             function runAll() {
+                // 実行前に状態をリセット
+                myInterpreter = null;
+                document.getElementById('outputDiv').innerHTML = "";
+                document.getElementById('stateDiv').innerHTML = "";
+                window.debugVars = {};
+                previousDebugVars = {};
+                // 実行履歴はクリアしない
+
                 if (!prepareInterpreter()) return;
 
                 ignoreBreakpoints = true; // ブレークポイントを無効にする
