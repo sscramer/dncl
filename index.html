@@ -1427,12 +1427,13 @@
 
             Blockly.Python.provideFunction_ = function(name, codeLines) {
                 const placeholder = '%FUNCTION_NAME_PLACEHOLDER%';
+                let functionName = Blockly.Python.variableDB_.getName(name, 'PROCEDURE');
                 if (!Blockly.Python.definitions_[name]) {
-                    let functionName = Blockly.Python.variableDB_.getDistinctName(name, 'PROCEDURE');
+                    functionName = Blockly.Python.variableDB_.getDistinctName(name, 'PROCEDURE');
                     let code = codeLines.join('\n').replace(new RegExp(placeholder, 'g'), functionName);
                     Blockly.Python.definitions_[name] = code;
                 }
-                return Blockly.Python.variableDB_.getName(name, 'PROCEDURE');
+                return functionName;
             };
 
             Blockly.Python['assignment'] = function(block) {
@@ -1475,7 +1476,11 @@
             Blockly.Python['array_assignment_full'] = function(block) {
                 const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
                 const elements = block.getFieldValue('ELEMENTS');
-                return `${arr} = [${elements}]\n`;
+                const splitted = elements.split(',').map(s => {
+                    const trimmed = s.trim();
+                    return isNaN(Number(trimmed)) || trimmed === '' ? `'${trimmed}'` : Number(trimmed);
+                });
+                return `${arr} = [${splitted.join(', ')}]\n`;
             };
 
             Blockly.Python['array_assignment_full_2d'] = function (block) {
@@ -1575,15 +1580,11 @@
                 const stepVal = Blockly.Python.valueToCode(block, 'STEP', Blockly.Python.ORDER_NONE) || '1';
                 const branch = Blockly.Python.statementToCode(block, 'DO') || Blockly.Python.PASS;
 
-                const rangeFunc = Blockly.Python.provideFunction_(
-                    'dncl_range',
-                    ['def %FUNCTION_NAME_PLACEHOLDER%(start, end, step):',
-                     '  if step > 0:',
-                     '    return range(int(start), int(end) + 1, int(step))',
-                     '  else:',
-                     '    return range(int(start), int(end) - 1, int(step))']);
+                // The end value of the range is inclusive, so we need to adjust it by 1
+                // depending on the step direction.
+                const endExpr = `int(${toVal}) + (1 if int(${stepVal}) > 0 else -1)`;
 
-                return `for ${varName} in ${rangeFunc}(${fromVal}, ${toVal}, ${stepVal}):\n${branch}`;
+                return `for ${varName} in range(int(${fromVal}), ${endExpr}, int(${stepVal})):\n${branch}`;
             };
 
             Blockly.Python['inc_dec'] = function(block) {
