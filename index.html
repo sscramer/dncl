@@ -650,44 +650,7 @@
             Blockly.Python.ORDER_ASSIGNMENT = 16;
             Blockly.Python.ORDER_NONE = 99;
 
-            // Pythonジェネレータの初期化
-            Blockly.Python.init = function (workspace) {
-                // 予約語リストを作成
-                Blockly.Python.reservedWords_ = new Set([
-                    ...('and,as,assert,break,class,continue,def,del,elif,else,except,finally,for,from,global,if,import,in,is,lambda,nonlocal,not,or,pass,raise,return,try,while,with,yield').split(','),
-                    'print' // printも予約語として扱う
-                ]);
-
-                // 変数名を管理するDBを初期化
-                if (!Blockly.Python.variableDB_) {
-                    Blockly.Python.variableDB_ = new Blockly.Names(Blockly.Python.reservedWords_);
-                } else {
-                    Blockly.Python.variableDB_.reset();
-                }
-                Blockly.Python.variableDB_.setVariableMap(workspace.getVariableMap());
-
-                // Pythonではインデントが重要なので、インデント文字列を定義
-                this.INDENT = '    ';
-            };
-
-            // ブロックのコード生成後に呼ばれる
-            Blockly.Python.finish = function (code) {
-                // Pythonではトップレベルのコードにインデントは不要
-                return code;
-            };
-
-            // 有効な変数名に変換
-            Blockly.Python.getValidName_ = function (name) {
-                // Pythonの命名規則に合わせて変換（例: スペースをアンダースコアに）
-                return name.replace(/[\s\W]/g, '_');
-            };
-
-            // ブロックスタックをコードに変換
-            Blockly.Python.scrub_ = function (block, code, opt_thisOnly) {
-                const nextBlock = block.nextConnection && block.nextConnection.targetBlock();
-                const nextCode = opt_thisOnly ? '' : this.blockToCode(nextBlock);
-                return code + nextCode;
-            };
+            // More complete init/finish/scrub functions are defined below with the other Python generators.
 
             //======================================================================
             // 実行履歴管理機能
@@ -1345,24 +1308,100 @@
             Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
             Blockly.JavaScript['breakpoint'] = function (block) { const number = Blockly.JavaScript.valueToCode(block, 'NUMBER', ORDER_NONE) || 'null'; return `checkBreakpoint(${number});\n`; };
 
-            // --- ブロックからPythonコードを生成するロジック ---
+            Blockly.Python['procedures_defreturn'] = function(block) {
+                const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+                let xfix1 = '';
+                if (Blockly.Python.STATEMENT_PREFIX) {
+                    xfix1 += Blockly.Python.injectId(Blockly.Python.STATEMENT_PREFIX, block);
+                }
+                if (Blockly.Python.STATEMENT_SUFFIX) {
+                    xfix1 += Blockly.Python.injectId(Blockly.Python.STATEMENT_SUFFIX, block);
+                }
+                if (xfix1) {
+                    xfix1 = Blockly.Python.prefixLines(xfix1, Blockly.Python.INDENT);
+                }
+                let loopTrap = '';
+                if (Blockly.Python.INFINITE_LOOP_TRAP) {
+                    loopTrap = Blockly.Python.prefixLines(Blockly.Python.injectId(Blockly.Python.INFINITE_LOOP_TRAP, block), Blockly.Python.INDENT);
+                }
+                const branch = Blockly.Python.statementToCode(block, 'STACK');
+                let returnValue = Blockly.Python.valueToCode(block, 'RETURN', Blockly.Python.ORDER_NONE) || '';
+                let xfix2 = '';
+                if (branch && returnValue) {
+                    xfix2 = Blockly.Python.prefixLines(Blockly.Python.injectId(Blockly.Python.STATEMENT_SUFFIX, block), Blockly.Python.INDENT);
+                }
+                if (returnValue) {
+                    returnValue = Blockly.Python.INDENT + 'return ' + returnValue + '\n';
+                } else if (!branch) {
+                    returnValue = Blockly.Python.PASS;
+                }
+                const args = [];
+                const variables = block.getVars();
+                for (let i = 0; i < variables.length; i++) {
+                    args[i] = Blockly.Python.variableDB_.getName(variables[i], 'VARIABLE');
+                }
+                let code = 'def ' + funcName + '(' + args.join(', ') + '):\n' + xfix1 + loopTrap + branch + xfix2 + returnValue;
+                code = Blockly.Python.scrub_(block, code);
+                Blockly.Python.definitions_['%' + funcName] = code;
+                return null;
+            };
+
+            Blockly.Python['procedures_defnoreturn'] = Blockly.Python['procedures_defreturn'];
+
+            Blockly.Python['procedures_callreturn'] = function(block) {
+                const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+                const args = [];
+                const variables = block.getVars();
+                for (let i = 0; i < variables.length; i++) {
+                    args[i] = Blockly.Python.valueToCode(block, 'ARG' + i, Blockly.Python.ORDER_NONE) || 'None';
+                }
+                const code = funcName + '(' + args.join(', ') + ')';
+                return [code, Blockly.Python.ORDER_FUNCTION_CALL];
+            };
+
+            Blockly.Python['procedures_callnoreturn'] = function(block) {
+                const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+                const args = [];
+                const variables = block.getVars();
+                for (let i = 0; i < variables.length; i++) {
+                    args[i] = Blockly.Python.valueToCode(block, 'ARG' + i, Blockly.Python.ORDER_NONE) || 'None';
+                }
+                const code = funcName + '(' + args.join(', ') + ')\n';
+                return code;
+            };
+
+            Blockly.Python['procedures_ifreturn'] = function(block) {
+                let condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
+                let code = 'if ' + condition + ':\n';
+                if (block.hasReturnValue_) {
+                    const value = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_NONE) || 'None';
+                    code += Blockly.Python.INDENT + 'return ' + value + '\n';
+                } else {
+                    code += Blockly.Python.INDENT + 'return\n';
+                }
+                return code;
+            };
+
             // (このセクションはPythonジェネレータの初期化時に上書きされるため、ここではプレースホルダとしておく)
             Blockly.Python.init = function(workspace) {
                 Blockly.Python.PASS = this.INDENT + 'pass\n';
-                // 予約語リスト
-                Blockly.Python.reservedWords_ = new Set(['and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield', 'print', 'int', 'float', 'str', 'list', 'dict', 'set', 'tuple', 'input', 'range']);
 
-                // 変数名を管理するDBを初期化
+                // Create a string of reserved words for the Blockly.Names constructor.
+                const reservedWordsString = 'and,as,assert,break,class,continue,def,del,elif,else,except,finally,for,from,global,if,import,in,is,lambda,nonlocal,not,or,pass,raise,return,try,while,with,yield,print,int,float,str,list,dict,set,tuple,input,range';
+
+                // Initialize the variable DB with the reserved words string.
                 if (!Blockly.Python.variableDB_) {
-                    Blockly.Python.variableDB_ = new Blockly.Names(Blockly.Python.reservedWords_);
+                    Blockly.Python.variableDB_ = new Blockly.Names(reservedWordsString);
                 } else {
                     Blockly.Python.variableDB_.reset();
                 }
                 Blockly.Python.variableDB_.setVariableMap(workspace.getVariableMap());
 
-                // 必要なライブラリのインポート文を保持する
+                // For other uses, it can be useful to have the reserved words as a set.
+                Blockly.Python.reservedWords_ = new Set(reservedWordsString.split(','));
+
+                // Initialize imports and definitions
                 Blockly.Python.imports_ = {};
-                // 使用されるヘルパー関数を保持する
                 Blockly.Python.definitions_ = {};
             };
 
@@ -2034,7 +2073,9 @@
                 toolbox: document.getElementById('toolbox'),
                 scrollbars: true,
                 zoom: { controls: true, wheel: true }
-            });        // --- ボタンのイベントリスナー ---
+            });
+            window.workspace = workspace; // Make workspace global for Playwright tests
+            // --- ボタンのイベントリスナー ---
             document.getElementById('runButton').addEventListener('click', runAll);
             document.getElementById('stepButton').addEventListener('click', stepCode);
             document.getElementById('stepBackButton').addEventListener('click', stepBack);
@@ -2084,6 +2125,7 @@
                     document.getElementById('jsCodeDiv').textContent = finalCode;
                     codeModal.style.display = 'flex';
                 } catch (e) {
+                    console.error("Code generation failed:", e);
                     setRunStatus("コード生成エラー", "status-error");
                     displayOutput("コード生成エラー: " + e.message, true);
                     document.getElementById('jsCodeDiv').textContent = "コードの生成に失敗しました。\n" + e.message;
