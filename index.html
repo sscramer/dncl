@@ -629,6 +629,7 @@
 
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
+            const ORDER_MEMBER = 1;
             const ORDER_NONE = 99;
             const ORDER_ASSIGNMENT = 2;
             const ORDER_FUNCTION_CALL = 2;
@@ -1625,6 +1626,9 @@
             };
 
             Blockly.Python['random_choice'] = function(block) {
+                // Defensive fix for potential 'ORDER_MEMBER is not defined' error
+                Blockly.Python.ORDER_MEMBER = Blockly.Python.ORDER_MEMBER || 1.1;
+
                 Blockly.Python.imports_['random'] = 'import random';
                 const list = Blockly.Python.valueToCode(block, 'LIST', Blockly.Python.ORDER_MEMBER) || '[]';
                 return [`random.choice(${list})`, Blockly.Python.ORDER_FUNCTION_CALL];
