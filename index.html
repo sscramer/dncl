@@ -495,8 +495,12 @@
                 <button id="pythonImportModalCloseButton" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <p>対応構文: 変数代入 (`x = 10`), `print()`</p>
-                <textarea id="pythonCodeTextarea" style="width: 100%; height: 200px; margin-top: 10px; font-family: monospace;"></textarea>
+                <p><b>【β版】Pythonコードからインポート</b></p>
+                <p style="font-size: 12px; color: #666;">
+                    ごく基本的な構文のみ対応しています。複雑なコードは正しく変換されない場合があります。<br>
+                    <b>対応構文:</b> 変数代入, リスト, input, print, random.choice, if/elif/else
+                </p>
+                <textarea id="pythonCodeTextarea" style="width: 100%; height: 200px; margin-top: 10px; font-family: monospace; border: 1px solid #ccc; padding: 5px;"></textarea>
                 <button id="convertPythonButton" style="margin-top: 10px; padding: 8px 15px;">変換</button>
             </div>
         </div>
@@ -2221,6 +2225,7 @@
                     const stack = [root];
 
                     function getNodeType(line) {
+                        if (line.startsWith('for ')) return 'for';
                         if (line.startsWith('if ')) return 'if';
                         if (line.startsWith('elif ')) return 'elif';
                         if (line.startsWith('else:')) return 'else';
@@ -2259,8 +2264,13 @@
                     while (i < nodes.length) {
                         const node = nodes[i];
 
+                        // for ループ
+                        if (node.type === 'for') {
+                            xml += generateForLoopXml(node);
+                            i++;
+                        }
                         // if-elif-elseチェーンをグループとして処理
-                        if (node.type === 'if') {
+                        else if (node.type === 'if') {
                             const chain = [node];
                             let j = i + 1;
                             while (j < nodes.length && (nodes[j].type === 'elif' || nodes[j].type === 'else')) {
@@ -2336,6 +2346,86 @@
                     }
 
                     return { xml: finalXml.replace('<block', `<block y="${y}"`), consumed: consumed };
+                }
+
+                function generateForLoopXml(node) {
+                    // Case 1: for i in range(...)
+                    const rangeMatch = node.content.match(/^for\s+(.*)\s+in\s+range\((.*)\):$/);
+                    if (rangeMatch) {
+                        const varName = rangeMatch[1];
+                        const rangeArgs = rangeMatch[2].split(',');
+
+                        const fromXml = parseValueXml(rangeArgs[0].trim());
+                        // Blockly's range is exclusive, Python's is exclusive. But the block is inclusive.
+                        // So we subtract 1 from the 'to' value. This is a simplification.
+                        const toXml = parseValueXml(rangeArgs[1].trim() + " - 1");
+                        const stepXml = rangeArgs.length > 2 ? parseValueXml(rangeArgs[2].trim()) : '<block type="number_literal"><field name="NUM">1</field></block>';
+
+                        const doXml = generateXml(node.children);
+
+                        return `
+                            <block type="for_loop" y="${y}">
+                                <field name="VAR">${varName}</field>
+                                <value name="FROM">${fromXml}</value>
+                                <value name="TO">${toXml}</value>
+                                <value name="STEP">${stepXml}</value>
+                                <statement name="DO">${doXml}</statement>
+                            </block>`;
+                    }
+
+                    // Case 2: for x in list
+                    const listMatch = node.content.match(/^for\s+(.*)\s+in\s+(.*):$/);
+                    if (listMatch) {
+                        // This is complex to convert directly. We simulate it:
+                        // for _i in range(0, len(list)):
+                        //   x = list[_i]
+                        // NOTE: This is a major simplification and has limitations.
+                        const itemVar = listMatch[1];
+                        const listVar = listMatch[2];
+                        const indexVar = `_i_${itemVar}`; // A temporary index variable
+
+                        // Inner block: x = list[_i]
+                        const assignmentXml = `
+                            <block type="assignment">
+                                <field name="VAR">${itemVar}</field>
+                                <value name="VALUE">
+                                    <block type="array_access_1d">
+                                        <field name="ARRAY">${listVar}</field>
+                                        <value name="INDEX">
+                                            <block type="variable_access">
+                                                <field name="VAR">${indexVar}</field>
+                                            </block>
+                                        </value>
+                                    </block>
+                                </value>
+                            </block>`;
+
+                        const userBlocksXml = generateXml(node.children);
+                        let doXml = assignmentXml;
+                        if (userBlocksXml) {
+                            const lastIndex = doXml.lastIndexOf('</block>');
+                            if (lastIndex !== -1) {
+                                doXml = doXml.slice(0, lastIndex) + `<next>${userBlocksXml}</next>` + doXml.slice(lastIndex);
+                            }
+                        }
+
+                        // There's no direct way to get array length in this block system.
+                        // This is a significant limitation of the target environment.
+                        // We will have to assume a placeholder or a magic block if one existed.
+                        // For now, let's just hardcode a high number as a placeholder.
+                        const toXml = '<block type="number_literal"><field name="NUM">100</field></block>'; // Placeholder
+
+                        return `
+                            <block type="for_loop" y="${y}">
+                                <field name="VAR">${indexVar}</field>
+                                <value name="FROM"><block type="number_literal"><field name="NUM">0</field></block></value>
+                                <value name="TO">${toXml}</value>
+                                <value name="STEP"><block type="number_literal"><field name="NUM">1</field></block></value>
+                                <statement name="DO">${doXml}</statement>
+                            </block>`;
+                    }
+
+                    return '';
                 }
 
                 function processNode(nodes, index) {
@@ -2418,6 +2508,31 @@
                 }
 
                 function parseValueXml(valueStr) {
+                    // Array access
+                    const arrayAccessMatch = valueStr.match(/^(.*)\[(.*)\]$/);
+                    if (arrayAccessMatch) {
+                        return `
+                            <block type="array_access_1d">
+                                <field name="ARRAY">${arrayAccessMatch[1]}</field>
+                                <value name="INDEX">${parseValueXml(arrayAccessMatch[2])}</value>
+                            </block>`;
+                    }
+
+                    // Try to parse as arithmetic expression first
+                    const arithmeticMatch = valueStr.match(/^(.*)\s*([+\-*/])\s*(.*)$/);
+                    if (arithmeticMatch) {
+                        const [_, lhs, op, rhs] = arithmeticMatch;
+                        const blockOp = { '+': '+', '-': '-', '*': '×', '/': '/' }[op];
+                        if (blockOp) {
+                            return `
+                                <block type="arithmetic">
+                                    <field name="OP">${blockOp}</field>
+                                    <value name="A">${parseValueXml(lhs.trim())}</value>
+                                    <value name="B">${parseValueXml(rhs.trim())}</value>
+                                </block>`;
+                        }
+                    }
+
                     if (!isNaN(Number(valueStr))) {
                         return `<block type="number_literal"><field name="NUM">${valueStr}</field></block>`;
                     }
@@ -2429,6 +2544,22 @@
 
                 function parseStatementXml(content) {
                     let match;
+
+                    // --- Swap Pattern ---
+                    const swapMatch = content.match(/^(.*?),\s*(.*?)\s*=\s*(.*?),\s*(.*?)$/);
+                    if (swapMatch && swapMatch[1].trim() === swapMatch[4].trim() && swapMatch[2].trim() === swapMatch[3].trim()) {
+                        const a = swapMatch[1].trim();
+                        const b = swapMatch[2].trim();
+                        const tempVar = `_temp_swap`;
+
+                        const temp_equals_a = `<block type="assignment"><field name="VAR">${tempVar}</field><value name="VALUE">${parseValueXml(a)}</value></block>`;
+                        const a_equals_b = `<block type="assignment"><field name="VAR">${a}</field><value name="VALUE">${parseValueXml(b)}</value></block>`;
+                        const b_equals_temp = `<block type="assignment"><field name="VAR">${b}</field><value name="VALUE">${parseValueXml(tempVar)}</value></block>`;
+
+                        // Chain them together
+                        return temp_equals_a.replace('</block>', `<next>${a_equals_b.replace('</block>', `<next>${b_equals_temp}</next></block>`)}</next></block>`);
+                    }
+
                     // --- Assignment ---
                     if ((match = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/))) {
                         const varName = match[1];
