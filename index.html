@@ -1267,6 +1267,7 @@
                 { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
                 { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
                 { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
+                { "type": "random_choice", "message0": "リスト %1 からランダムに選ぶ", "args0": [{ "type": "input_value", "name": "LIST", "check": "Array" }], "output": null, "colour": 230, "tooltip": "リストからランダムに要素を1つ選ぶ" },
                 { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
                 { "type": "simple_display", "message0": "表示する %1 %2", "args0": [{ "type": "input_value", "name": "VALUE" }, { "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "値を表示する（改行の有無を選択）" },
                 { "type": "display", "message0": "表示項目 %1", "args0": [{ "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" },
@@ -1318,6 +1319,11 @@
             Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
             Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['random_choice'] = function(block) {
+                const list = Blockly.JavaScript.valueToCode(block, 'LIST', ORDER_MEMBER) || '[]';
+                const code = `${list}[Math.floor(Math.random() * ${list}.length)]`;
+                return [code, ORDER_FUNCTION_CALL];
+            };
             Blockly.JavaScript['display_binary'] = (block) => `displayBinary(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'});\n`;
             Blockly.JavaScript['simple_display'] = (block) => { const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${value}, false, ${newline});\n`; };
             Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
@@ -1616,6 +1622,12 @@
                 const min = Blockly.Python.valueToCode(block, 'MIN', Blockly.Python.ORDER_NONE) || '0';
                 const max = Blockly.Python.valueToCode(block, 'MAX', Blockly.Python.ORDER_NONE) || '0';
                 return [`random.randint(int(${min}), int(${max}))`, Blockly.Python.ORDER_FUNCTION_CALL];
+            };
+
+            Blockly.Python['random_choice'] = function(block) {
+                Blockly.Python.imports_['random'] = 'import random';
+                const list = Blockly.Python.valueToCode(block, 'LIST', Blockly.Python.ORDER_MEMBER) || '[]';
+                return [`random.choice(${list})`, Blockly.Python.ORDER_FUNCTION_CALL];
             };
 
             Blockly.Python['display_binary'] = (block) => `print(bin(int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})))\n`;
@@ -2198,80 +2210,261 @@
              * @returns {string} Blockly XML文字列
              */
             function convertPythonToBlockly(pythonCode) {
-                const lines = pythonCode.split('\\n');
-                let blocksXml = '';
-                let y = 10; // ブロックのY座標
+                const lines = pythonCode.split('\n');
+                // --- Pass 1: Build Abstract Syntax Tree (AST) ---
+                function buildAst() {
+                    const root = { type: 'ROOT', children: [], indent: -1 };
+                    const stack = [root];
 
-                lines.forEach(line => {
-                    line = line.trim();
-                    if (!line) return;
+                    function getNodeType(line) {
+                        if (line.startsWith('if ')) return 'if';
+                        if (line.startsWith('elif ')) return 'elif';
+                        if (line.startsWith('else:')) return 'else';
+                        if (line.startsWith('print(')) return 'print';
+                        if (line.includes('=')) return 'assign';
+                        return 'unknown';
+                    }
 
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || trimmed.startsWith('#')) continue;
+
+                        const indent = line.match(/^\s*/)[0].length;
+                        const node = {
+                            type: getNodeType(trimmed),
+                            content: trimmed,
+                            children: [],
+                            indent: indent
+                        };
+
+                        while (stack[stack.length - 1].indent >= indent) {
+                            stack.pop();
+                        }
+
+                        stack[stack.length - 1].children.push(node);
+                        stack.push(node);
+                    }
+                    return root;
+                }
+
+                // --- Pass 2: Generate XML from AST ---
+                let y = 10;
+                function generateXml(nodes) {
+                    let xml = '';
+                    let i = 0;
+                    while (i < nodes.length) {
+                        const node = nodes[i];
+
+                        // if-elif-elseチェーンをグループとして処理
+                        if (node.type === 'if') {
+                            const chain = [node];
+                            let j = i + 1;
+                            while (j < nodes.length && (nodes[j].type === 'elif' || nodes[j].type === 'else')) {
+                                chain.push(nodes[j]);
+                                j++;
+                            }
+
+                            const { xml: chainXml, consumed } = generateIfChainXml(chain);
+                            xml += chainXml;
+                            i += consumed;
+                        } else { // その他のステートメント
+                            const statementXml = parseStatementXml(node.content);
+                            if (statementXml) {
+                                xml += statementXml.replace('<block', `<block y="${y}"`);
+                                y += 70;
+                            }
+                            i++;
+                        }
+
+                        // 次のブロックとの接続
+                        if (i < nodes.length && xml) {
+                            const nextXml = generateXml(nodes.slice(i));
+                            if(nextXml) {
+                                xml = xml.replace(/<\/block>\s*$/, `<next>${nextXml}</next></block>`);
+                            }
+                            break;
+                        }
+                    }
+                    return xml;
+                }
+
+                function generateIfChainXml(chain) {
+                    if (!chain || chain.length === 0) {
+                        return { xml: '', consumed: 0 };
+                    }
+
+                    const head = chain[0];
+                    const tail = chain.slice(1);
+
+                    // Base case: 'else' block
+                    if (head.type === 'else') {
+                        const doXml = generateXml(head.children);
+                        return { xml: doXml, consumed: 1 };
+                    }
+
+                    // 'if' or 'elif' block
+                    const conditionMatch = head.content.match(/^(if|elif)\s+(.*):$/);
+                    const conditionXml = parseConditionXml(conditionMatch[2]);
+                    const doXml = generateXml(head.children);
+
+                    let elseXml = '';
+                    let consumed = 1;
+                    if (tail.length > 0) {
+                        const { xml: nextChainXml, consumed: nextConsumed } = generateIfChainXml(tail);
+                        elseXml = nextChainXml;
+                        consumed += nextConsumed;
+                    }
+
+                    let finalXml;
+                    if (elseXml) {
+                        finalXml = `
+                        <block type="if_else_statement">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO0">${doXml}</statement>
+                            <statement name="ELSE">${elseXml}</statement>
+                        </block>`;
+                    } else {
+                        finalXml = `
+                        <block type="if_statement">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
+                    }
+
+                    return { xml: finalXml.replace('<block', `<block y="${y}"`), consumed: consumed };
+                }
+
+                function processNode(nodes, index) {
+                    const node = nodes[index];
+                    const content = node.content;
                     let match;
 
-                    // パターン1: 変数代入 (e.g., x = 10 or name = "hello")
-                    if ((match = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/))) {
+                    // --- IF/ELIF/ELSE ---
+                    if (content.startsWith('if') || content.startsWith('elif') || content.startsWith('else')) {
+                        return processIfChain(nodes, index);
+                    }
+
+                    // --- Single Statement ---
+                    let xml = parseStatementXml(content);
+                    if(xml) {
+                         xml = xml.replace('<block', `<block y="${y}"`);
+                         y += 70;
+                    }
+                    return { xml: xml, consumedNodes: 1 };
+                }
+
+                function processIfChain(nodes, index) {
+                    const startNode = nodes[index];
+                    const ifMatch = startNode.content.match(/^(if|elif)\s+(.*):$/);
+                    const elseMatch = startNode.content.match(/^else:$/);
+
+                    if (!ifMatch && !elseMatch) return { xml: '', consumedNodes: 1};
+
+                    let conditionXml = ifMatch ? parseConditionXml(ifMatch[2]) : '';
+                    let doXml = generateXml(startNode.children);
+
+                    let consumed = 1;
+                    let elseXml = '';
+
+                    if (index + 1 < nodes.length) {
+                        const nextNode = nodes[index + 1];
+                        if (nextNode.content.startsWith('elif') || nextNode.content.startsWith('else')) {
+                            const { xml: nextChainXml, consumedNodes: nextConsumed } = processIfChain(nodes, index + 1);
+                            elseXml = nextChainXml;
+                            consumed += nextConsumed;
+                        }
+                    }
+
+                    if (elseMatch) { // else節は前のifのELSEに繋がる
+                        return { xml: doXml, consumedNodes: consumed };
+                    }
+
+                    let finalXml;
+                    if (elseXml) {
+                        finalXml = `
+                        <block type="if_else_statement" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO0">${doXml}</statement>
+                            <statement name="ELSE">${elseXml}</statement>
+                        </block>`;
+                    } else {
+                        finalXml = `
+                        <block type="if_statement" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
+                    }
+                    y+= 150;
+
+                    return { xml: finalXml, consumedNodes: consumed };
+                }
+
+                function parseConditionXml(conditionStr) {
+                    const compMatch = conditionStr.match(/(.*)\s*(==|!=|>|<|>=|<=)\s*(.*)/);
+                    if (compMatch) {
+                        const [_, lhs, op, rhs] = compMatch;
+                        return `
+                            <block type="comparison">
+                                <field name="OP">${op.replace('==', '===')}</field>
+                                <value name="A">${parseValueXml(lhs.trim())}</value>
+                                <value name="B">${parseValueXml(rhs.trim())}</value>
+                            </block>`;
+                    }
+                    return '<block type="logic_boolean"><field name="BOOL">TRUE</field></block>';
+                }
+
+                function parseValueXml(valueStr) {
+                    if (!isNaN(Number(valueStr))) {
+                        return `<block type="number_literal"><field name="NUM">${valueStr}</field></block>`;
+                    }
+                    if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
+                        return `<block type="string_literal"><field name="TEXT">${valueStr.slice(1, -1)}</field></block>`;
+                    }
+                    return `<block type="variable_access"><field name="VAR">${valueStr}</field></block>`;
+                }
+
+                function parseStatementXml(content) {
+                    let match;
+                    // --- Assignment ---
+                    if ((match = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/))) {
                         const varName = match[1];
-                        const value = match[2].trim();
-                        let valueBlock = '';
-
-                        // 値が数値か文字列かを判定
-                        if (!isNaN(Number(value))) { // 数値
-                            valueBlock = `
-                                <block type="number_literal">
-                                    <field name="NUM">${value}</field>
-                                </block>`;
-                        } else if (value.startsWith('"') && value.endsWith('"')) { // 文字列
-                            valueBlock = `
-                                <block type="string_literal">
-                                    <field name="TEXT">${value.slice(1, -1)}</field>
-                                </block>`;
-                        } else {
-                            // 現時点では変数から変数への代入は未サポート
-                            return;
+                        const valueStr = match[2].trim();
+                        // random.choice
+                        if (valueStr.startsWith('random.choice')) {
+                            const listVar = valueStr.match(/random\.choice\((.*)\)/)[1].trim();
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_choice"><value name="LIST"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block></value></block>`;
                         }
-
-                        blocksXml += `
-                            <block type="assignment" y="${y}">
-                                <field name="VAR">${varName}</field>
-                                <value name="VALUE">
-                                    ${valueBlock}
-                                </value>
-                            </block>`;
-                        y += 70; // 次のブロックのためのY座標を更新
-                        return;
+                        // input
+                        if (valueStr.startsWith('input')) {
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="external_input"><field name="TYPE">STRING</field></block></value></block>`;
+                        }
+                        // list
+                        if (valueStr.startsWith('[')) {
+                            const elements = valueStr.slice(1, -1).split(',').map(s => s.trim().replace(/"/g, ''));
+                            return `<block type="array_assignment_full"><field name="ARRAY">${varName}</field><field name="ELEMENTS">${elements.join(',')}</field></block>`;
+                        }
+                        // simple assignment
+                        return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${parseValueXml(valueStr)}</value></block>`;
                     }
-
-                    // パターン2: print() (e.g., print("hello") or print(x))
-                    if ((match = line.match(/^print\((.*)\)$/))) {
+                    // --- Print ---
+                    if ((match = content.match(/^print\((.*)\)$/))) {
                         const arg = match[1].trim();
-                        let argBlock = '';
-
-                        if (arg.startsWith('"') && arg.endsWith('"')) { // 文字列リテラル
-                            argBlock = `
-                                <block type="string_literal">
-                                    <field name="TEXT">${arg.slice(1, -1)}</field>
-                                </block>`;
-                        } else { // 変数として扱う
-                             argBlock = `
-                                <block type="variable_access">
-                                    <field name="VAR">${arg}</field>
-                                </block>`;
+                        const formatMatch = arg.match(/^"(.*){}"\.format\((.*)\)$/);
+                        if (formatMatch) {
+                            const textPart = formatMatch[1];
+                            const varPart = formatMatch[2].trim();
+                            return `<block type="display"><mutation items="2"></mutation><field name="NEWLINE">TRUE</field><value name="ADD0"><block type="string_literal"><field name="TEXT">${textPart}</field></block></value><value name="ADD1"><block type="variable_access"><field name="VAR">${varPart}</field></block></value></block>`;
                         }
-
-                        blocksXml += `
-                            <block type="simple_display" y="${y}">
-                                <field name="NEWLINE">TRUE</field>
-                                <value name="VALUE">
-                                    ${argBlock}
-                                </value>
-                            </block>`;
-                        y += 70;
-                        return;
+                        return `<block type="simple_display"><field name="NEWLINE">TRUE</field><value name="VALUE">${parseValueXml(arg)}</value></block>`;
                     }
-                });
+                    return '';
+                }
 
-                // 連結したブロックXMLを<xml>タグで囲む
-                return `<xml xmlns="https://developers.google.com/blockly/xml">${blocksXml}</xml>`;
+                const ast = buildAst();
+                console.log("Generated AST:", JSON.stringify(ast, null, 2));
+                const topLevelXml = generateXml(ast.children);
+                console.log("Generated XML:", topLevelXml);
+                return `<xml xmlns="https://developers.google.com/blockly/xml">${topLevelXml}</xml>`;
             }
 
             // --- ウィンドウリサイズ時の処理 ---
