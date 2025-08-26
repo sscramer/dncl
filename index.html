@@ -9,7 +9,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL Simulator (v2.1.1a)</title>
+    <title>DNCL Simulator (v2.3)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
@@ -563,6 +563,8 @@
             <block type="square"></block>
             <block type="power"></block>
             <block type="random"></block>
+            <block type="random_float"></block>
+            <block type="random_choice"></block>
         </category>
         <category name="条件と論理" colour="210">
             <block type="if_statement"></block>
@@ -2232,12 +2234,16 @@
                     const stack = [root];
 
                     function getNodeType(line) {
+                        if (line.trim() === 'break') return 'break';
+                        if (line.startsWith('def ')) return 'func_def';
+                        if (line.startsWith('while ')) return 'while';
                         if (line.startsWith('for ')) return 'for';
                         if (line.startsWith('if ')) return 'if';
                         if (line.startsWith('elif ')) return 'elif';
                         if (line.startsWith('else:')) return 'else';
                         if (line.startsWith('print(')) return 'print';
                         if (line.includes('=')) return 'assign';
+                        if (line.match(/^[a-zA-Z_][a-zA-Z0-9_]*\(.*\)$/)) return 'func_call';
                         return 'unknown';
                     }
 
@@ -2271,8 +2277,27 @@
                     while (i < nodes.length) {
                         const node = nodes[i];
 
+                        // Break statements (ignored)
+                        if (node.type === 'break') {
+                            i++;
+                        }
+                        // Function Definition
+                        else if (node.type === 'func_def') {
+                            xml += generateFuncDefXml(node);
+                            i++;
+                        }
+                        // Function Call
+                        else if (node.type === 'func_call') {
+                            xml += parseStatementXml(node.content); // Reuse statement parser for this
+                            i++;
+                        }
+                        // while ループ
+                        else if (node.type === 'while') {
+                            xml += generateWhileLoopXml(node);
+                            i++;
+                        }
                         // for ループ
-                        if (node.type === 'for') {
+                        else if (node.type === 'for') {
                             xml += generateForLoopXml(node);
                             i++;
                         }
@@ -2353,6 +2378,45 @@
                     }
 
                     return { xml: finalXml.replace('<block', `<block y="${y}"`), consumed: consumed };
+                }
+
+                function generateFuncDefXml(node) {
+                    const match = node.content.match(/^def\s+([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\):$/);
+                    if (!match) return '';
+
+                    const funcName = match[1];
+                    const args = match[2].split(',').map(s => s.trim()).filter(s => s);
+                    const doXml = generateXml(node.children);
+
+                    let argsXml = '';
+                    if (args.length > 0) {
+                        argsXml = '<mutation>';
+                        for (const arg of args) {
+                            argsXml += `<arg name="${arg}"></arg>`;
+                        }
+                        argsXml += '</mutation>';
+                    }
+
+                    return `
+                        <block type="procedures_defnoreturn" y="${y}">
+                            ${argsXml}
+                            <field name="NAME">${funcName}</field>
+                            <statement name="STACK">${doXml}</statement>
+                        </block>`;
+                }
+
+                function generateWhileLoopXml(node) {
+                    const match = node.content.match(/^while\s+(.*):$/);
+                    if (!match) return '';
+
+                    const conditionXml = parseValueXml(match[1].trim());
+                    const doXml = generateXml(node.children);
+
+                    return `
+                        <block type="while_loop" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
                 }
 
                 function generateForLoopXml(node) {
@@ -2632,7 +2696,8 @@
                         return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${parseValueXml(valueStr)}</value></block>`;
                     }
                     // --- Print ---
-                    if ((match = content.match(/^print\((.*)\)$/))) {
+                    if (content.startsWith('print(')) {
+                        const match = content.match(/^print\((.*)\)$/);
                         const arg = match[1].trim();
                         const formatMatch = arg.match(/^"(.*){}"\.format\((.*)\)$/);
                         if (formatMatch) {
