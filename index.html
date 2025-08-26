@@ -2548,7 +2548,7 @@
                         if (char === ')') parenCount++;
                         else if (char === '(') parenCount--;
                         else if (parenCount === 0 && (char === '*' || char === '/')) {
-                            const op = char === '*' ? '×' : '/';
+                            const op = char === '*' ? '*' : '/'; // Use '*' for value, not '×'
                             return `
                                 <block type="arithmetic">
                                     <field name="OP">${op}</field>
