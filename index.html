@@ -1272,6 +1272,7 @@
                 { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
                 { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
                 { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
+                { "type": "random_float", "message0": "0から1の乱数 (小数)", "output": "Number", "colour": 230, "tooltip": "0.0以上1.0未満の小数の乱数を生成する" },
                 { "type": "random_choice", "message0": "リスト %1 からランダムに選ぶ", "args0": [{ "type": "input_value", "name": "LIST", "check": "Array" }], "output": null, "colour": 230, "tooltip": "リストからランダムに要素を1つ選ぶ" },
                 { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
                 { "type": "simple_display", "message0": "表示する %1 %2", "args0": [{ "type": "input_value", "name": "VALUE" }, { "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "値を表示する（改行の有無を選択）" },
@@ -1324,6 +1325,7 @@
             Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
             Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['random_float'] = (block) => ['Math.random()', ORDER_FUNCTION_CALL];
             Blockly.JavaScript['random_choice'] = function(block) {
                 const list = Blockly.JavaScript.valueToCode(block, 'LIST', ORDER_MEMBER) || '[]';
                 const code = `${list}[Math.floor(Math.random() * ${list}.length)]`;
@@ -1627,6 +1629,11 @@
                 const min = Blockly.Python.valueToCode(block, 'MIN', Blockly.Python.ORDER_NONE) || '0';
                 const max = Blockly.Python.valueToCode(block, 'MAX', Blockly.Python.ORDER_NONE) || '0';
                 return [`random.randint(int(${min}), int(${max}))`, Blockly.Python.ORDER_FUNCTION_CALL];
+            };
+
+            Blockly.Python['random_float'] = function(block) {
+                Blockly.Python.imports_['random'] = 'import random';
+                return ['random.random()', Blockly.Python.ORDER_FUNCTION_CALL];
             };
 
             Blockly.Python['random_choice'] = function(block) {
@@ -2355,11 +2362,16 @@
                         const varName = rangeMatch[1];
                         const rangeArgs = rangeMatch[2].split(',');
 
-                        const fromXml = parseValueXml(rangeArgs[0].trim());
-                        // Blockly's range is exclusive, Python's is exclusive. But the block is inclusive.
-                        // So we subtract 1 from the 'to' value. This is a simplification.
-                        const toXml = parseValueXml(rangeArgs[1].trim() + " - 1");
-                        const stepXml = rangeArgs.length > 2 ? parseValueXml(rangeArgs[2].trim()) : '<block type="number_literal"><field name="NUM">1</field></block>';
+                        let fromXml, toXml, stepXml;
+                        if (rangeArgs.length === 1) { // range(N)
+                            fromXml = '<block type="number_literal"><field name="NUM">0</field></block>';
+                            toXml = parseValueXml(rangeArgs[0].trim() + " - 1");
+                            stepXml = '<block type="number_literal"><field name="NUM">1</field></block>';
+                        } else { // range(start, stop, [step])
+                            fromXml = parseValueXml(rangeArgs[0].trim());
+                            toXml = parseValueXml(rangeArgs[1].trim() + " - 1");
+                            stepXml = rangeArgs.length > 2 ? parseValueXml(rangeArgs[2].trim()) : '<block type="number_literal"><field name="NUM">1</field></block>';
+                        }
 
                         const doXml = generateXml(node.children);
 
@@ -2507,9 +2519,49 @@
                     return '<block type="logic_boolean"><field name="BOOL">TRUE</field></block>';
                 }
 
-                function parseValueXml(valueStr) {
+                function parseValueXml(expression) {
+                    expression = expression.trim();
+
+                    // Lowest precedence: + and -
+                    let i = expression.length - 1;
+                    let parenCount = 0;
+                    while (i >= 0) {
+                        const char = expression[i];
+                        if (char === ')') parenCount++;
+                        else if (char === '(') parenCount--;
+                        else if (parenCount === 0 && (char === '+' || char === '-')) {
+                             return `
+                                <block type="arithmetic">
+                                    <field name="OP">${char}</field>
+                                    <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                                    <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                                </block>`;
+                        }
+                        i--;
+                    }
+
+                    // Next precedence: * and /
+                    i = expression.length - 1;
+                    parenCount = 0;
+                    while (i >= 0) {
+                        const char = expression[i];
+                        if (char === ')') parenCount++;
+                        else if (char === '(') parenCount--;
+                        else if (parenCount === 0 && (char === '*' || char === '/')) {
+                            const op = char === '*' ? '×' : '/';
+                            return `
+                                <block type="arithmetic">
+                                    <field name="OP">${op}</field>
+                                    <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                                    <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                                </block>`;
+                        }
+                        i--;
+                    }
+
+                    // Base cases
                     // Array access
-                    const arrayAccessMatch = valueStr.match(/^(.*)\[(.*)\]$/);
+                    const arrayAccessMatch = expression.match(/^(.*)\[(.*)\]$/);
                     if (arrayAccessMatch) {
                         return `
                             <block type="array_access_1d">
@@ -2518,32 +2570,26 @@
                             </block>`;
                     }
 
-                    // Try to parse as arithmetic expression first
-                    const arithmeticMatch = valueStr.match(/^(.*)\s*([+\-*/])\s*(.*)$/);
-                    if (arithmeticMatch) {
-                        const [_, lhs, op, rhs] = arithmeticMatch;
-                        const blockOp = { '+': '+', '-': '-', '*': '×', '/': '/' }[op];
-                        if (blockOp) {
-                            return `
-                                <block type="arithmetic">
-                                    <field name="OP">${blockOp}</field>
-                                    <value name="A">${parseValueXml(lhs.trim())}</value>
-                                    <value name="B">${parseValueXml(rhs.trim())}</value>
-                                </block>`;
-                        }
+                    if (!isNaN(Number(expression))) {
+                        return `<block type="number_literal"><field name="NUM">${expression}</field></block>`;
                     }
-
-                    if (!isNaN(Number(valueStr))) {
-                        return `<block type="number_literal"><field name="NUM">${valueStr}</field></block>`;
+                    if (expression.startsWith('"') && expression.endsWith('"')) {
+                        return `<block type="string_literal"><field name="TEXT">${expression.slice(1, -1)}</field></block>`;
                     }
-                    if (valueStr.startsWith('"') && valueStr.endsWith('"')) {
-                        return `<block type="string_literal"><field name="TEXT">${valueStr.slice(1, -1)}</field></block>`;
-                    }
-                    return `<block type="variable_access"><field name="VAR">${valueStr}</field></block>`;
+                    return `<block type="variable_access"><field name="VAR">${expression}</field></block>`;
                 }
 
                 function parseStatementXml(content) {
                     let match;
+
+                    // --- Augmenting Assignment (+=) ---
+                    const augmentMatch = content.match(/^(.*)\s*(\+=)\s*(.*)$/);
+                    if (augmentMatch) {
+                        const varName = augmentMatch[1].trim();
+                        const value = augmentMatch[3].trim();
+                        const arithmeticXml = parseValueXml(`${varName} + ${value}`);
+                        return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${arithmeticXml}</value></block>`;
+                    }
 
                     // --- Swap Pattern ---
                     const swapMatch = content.match(/^(.*?),\s*(.*?)\s*=\s*(.*?),\s*(.*?)$/);
@@ -2568,6 +2614,10 @@
                         if (valueStr.startsWith('random.choice')) {
                             const listVar = valueStr.match(/random\.choice\((.*)\)/)[1].trim();
                             return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_choice"><value name="LIST"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block></value></block>`;
+                        }
+                        // random.random
+                        if (valueStr.startsWith('random.random')) {
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_float"></block></value></block>`;
                         }
                         // input
                         if (valueStr.startsWith('input')) {
