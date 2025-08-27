@@ -430,11 +430,6 @@
         <input type="file" id="importFile" accept=".xml,text/xml,.txt" style="display: none;">
         <button id="showCodeButton">コード表示</button>
         <button id="importFromPythonButton">Pythonからインポート</button>
-        <label for="languageSelector" style="margin-left: 10px; font-size: 14px; display: flex; align-items: center; gap: 5px; cursor: default;">出力言語:</label>
-        <select id="languageSelector" style="padding: 5px; border-radius: 4px; border: 1px solid #bbb; font-size: 14px; background-color: white;">
-          <option value="JavaScript" selected>JavaScript</option>
-          <option value="Python">Python</option>
-        </select>
         <label title="ステップ実行（戻り）機能を有効にします（β版）">
             ステップ実行（戻り）β:
             <input type="checkbox" id="enableStepBackCheckbox">
@@ -2130,43 +2125,16 @@
             document.getElementById('importFile').addEventListener('change', (e) => loadBlocksFromFile(e.target.files[0]));
             document.getElementById('oneBasedCheckbox').addEventListener('change', (e) => { oneBasedMode = e.target.checked; });
 
-            // --- 言語セレクターのイベントリスナー ---
-            const langSelector = document.getElementById('languageSelector');
-            const runButton = document.getElementById('runButton');
-            const stepButton = document.getElementById('stepButton');
-            langSelector.addEventListener('change', (e) => {
-                const isPython = e.target.value === 'Python';
-                runButton.disabled = isPython;
-                stepButton.disabled = isPython;
-                stepBackButton.disabled = isPython;
-
-                if (isPython) {
-                    setRunStatus("Pythonモード (実行不可)", "status-error");
-                    displayOutput("Pythonモードが選択されました。このモードではプログラムの実行はできません。", false);
-                } else {
-                    setRunStatus("待機中");
-                }
-            });
-
             // --- コード表示モーダルの設定 ---
             const codeModal = document.getElementById('codeModal');
             document.getElementById('showCodeButton').addEventListener('click', () => {
-                const language = document.getElementById('languageSelector').value;
                 const modalTitle = document.querySelector('#codeModal .modal-header h2');
                 let finalCode = '';
 
                 try {
-                    if (language === 'Python') {
-                        modalTitle.textContent = '生成されたコード (Python)';
-                        finalCode = Blockly.Python.workspaceToCode(workspace);
-                    } else { // JavaScript
-                        modalTitle.textContent = '生成されたコード (JavaScript)';
-                        const allVariables = workspace.getAllVariables();
-                        const varNames = allVariables.map(v => v.name);
-                        const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : '';
-                        const blockCode = Blockly.JavaScript.workspaceToCode(workspace);
-                        finalCode = declarationString + blockCode;
-                    }
+                    modalTitle.textContent = '生成されたコード (Python)';
+                    finalCode = Blockly.Python.workspaceToCode(workspace);
+
                     document.getElementById('jsCodeDiv').textContent = finalCode;
                     codeModal.style.display = 'flex';
                 } catch (e) {
