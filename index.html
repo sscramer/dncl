@@ -2554,6 +2554,14 @@
                 function parseValueXml(expression) {
                     expression = expression.trim();
 
+                    // Handle parentheses and int() casting
+                    if (expression.startsWith('(') && expression.endsWith(')')) {
+                        return parseValueXml(expression.slice(1, -1));
+                    }
+                    if (expression.startsWith('int(') && expression.endsWith(')')) {
+                        return parseValueXml(expression.slice(4, -1));
+                    }
+
                     // Lowest precedence: + and -
                     let i = expression.length - 1;
                     let parenCount = 0;
