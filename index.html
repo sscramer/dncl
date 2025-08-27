@@ -9,7 +9,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL Simulator (v2.1.1a)</title>
+    <title>DNCL Simulator (v2.3)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
@@ -429,11 +429,7 @@
             </svg></button>
         <input type="file" id="importFile" accept=".xml,text/xml,.txt" style="display: none;">
         <button id="showCodeButton">コード表示</button>
-        <label for="languageSelector" style="margin-left: 10px; font-size: 14px; display: flex; align-items: center; gap: 5px; cursor: default;">出力言語:</label>
-        <select id="languageSelector" style="padding: 5px; border-radius: 4px; border: 1px solid #bbb; font-size: 14px; background-color: white;">
-          <option value="JavaScript" selected>JavaScript</option>
-          <option value="Python">Python</option>
-        </select>
+        <button id="importFromPythonButton">Pythonからインポート</button>
         <label title="ステップ実行（戻り）機能を有効にします（β版）">
             ステップ実行（戻り）β:
             <input type="checkbox" id="enableStepBackCheckbox">
@@ -484,6 +480,24 @@
                 <button id="modalCloseButton" class="modal-close">&times;</button>
             </div>
             <div class="modal-body" id="jsCodeDiv"></div>
+        </div>
+    </div>
+    <!-- Pythonインポートモーダル -->
+    <div id="pythonImportModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Pythonコードからインポート</h2>
+                <button id="pythonImportModalCloseButton" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p><b>【β版】Pythonコードからインポート</b></p>
+                <p style="font-size: 12px; color: #666;">
+                    ごく基本的な構文のみ対応しています。複雑なコードは正しく変換されない場合があります。<br>
+                    <b>対応構文:</b> 変数代入, リスト, input, print, random.choice, if/elif/else
+                </p>
+                <textarea id="pythonCodeTextarea" style="width: 100%; height: 200px; margin-top: 10px; font-family: monospace; border: 1px solid #ccc; padding: 5px;"></textarea>
+                <button id="convertPythonButton" style="margin-top: 10px; padding: 8px 15px;">変換</button>
+            </div>
         </div>
     </div>
     <!-- 実行終了通知モーダル -->
@@ -544,6 +558,8 @@
             <block type="square"></block>
             <block type="power"></block>
             <block type="random"></block>
+            <block type="random_float"></block>
+            <block type="random_choice"></block>
         </category>
         <category name="条件と論理" colour="210">
             <block type="if_statement"></block>
@@ -614,6 +630,7 @@
 
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
+            const ORDER_MEMBER = 1;
             const ORDER_NONE = 99;
             const ORDER_ASSIGNMENT = 2;
             const ORDER_FUNCTION_CALL = 2;
@@ -1252,6 +1269,8 @@
                 { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
                 { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
                 { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
+                { "type": "random_float", "message0": "0から1の乱数 (小数)", "output": "Number", "colour": 230, "tooltip": "0.0以上1.0未満の小数の乱数を生成する" },
+                { "type": "random_choice", "message0": "リスト %1 からランダムに選ぶ", "args0": [{ "type": "input_value", "name": "LIST", "check": "Array" }], "output": null, "colour": 230, "tooltip": "リストからランダムに要素を1つ選ぶ" },
                 { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
                 { "type": "simple_display", "message0": "表示する %1 %2", "args0": [{ "type": "input_value", "name": "VALUE" }, { "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "値を表示する（改行の有無を選択）" },
                 { "type": "display", "message0": "表示項目 %1", "args0": [{ "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" },
@@ -1303,6 +1322,12 @@
             Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
             Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['random_float'] = (block) => ['Math.random()', ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['random_choice'] = function(block) {
+                const list = Blockly.JavaScript.valueToCode(block, 'LIST', ORDER_MEMBER) || '[]';
+                const code = `${list}[Math.floor(Math.random() * ${list}.length)]`;
+                return [code, ORDER_FUNCTION_CALL];
+            };
             Blockly.JavaScript['display_binary'] = (block) => `displayBinary(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'});\n`;
             Blockly.JavaScript['simple_display'] = (block) => { const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${value}, false, ${newline});\n`; };
             Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
@@ -1601,6 +1626,20 @@
                 const min = Blockly.Python.valueToCode(block, 'MIN', Blockly.Python.ORDER_NONE) || '0';
                 const max = Blockly.Python.valueToCode(block, 'MAX', Blockly.Python.ORDER_NONE) || '0';
                 return [`random.randint(int(${min}), int(${max}))`, Blockly.Python.ORDER_FUNCTION_CALL];
+            };
+
+            Blockly.Python['random_float'] = function(block) {
+                Blockly.Python.imports_['random'] = 'import random';
+                return ['random.random()', Blockly.Python.ORDER_FUNCTION_CALL];
+            };
+
+            Blockly.Python['random_choice'] = function(block) {
+                // Defensive fix for potential 'ORDER_MEMBER is not defined' error
+                Blockly.Python.ORDER_MEMBER = Blockly.Python.ORDER_MEMBER || 1.1;
+
+                Blockly.Python.imports_['random'] = 'import random';
+                const list = Blockly.Python.valueToCode(block, 'LIST', Blockly.Python.ORDER_MEMBER) || '[]';
+                return [`random.choice(${list})`, Blockly.Python.ORDER_FUNCTION_CALL];
             };
 
             Blockly.Python['display_binary'] = (block) => `print(bin(int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})))\n`;
@@ -2086,43 +2125,16 @@
             document.getElementById('importFile').addEventListener('change', (e) => loadBlocksFromFile(e.target.files[0]));
             document.getElementById('oneBasedCheckbox').addEventListener('change', (e) => { oneBasedMode = e.target.checked; });
 
-            // --- 言語セレクターのイベントリスナー ---
-            const langSelector = document.getElementById('languageSelector');
-            const runButton = document.getElementById('runButton');
-            const stepButton = document.getElementById('stepButton');
-            langSelector.addEventListener('change', (e) => {
-                const isPython = e.target.value === 'Python';
-                runButton.disabled = isPython;
-                stepButton.disabled = isPython;
-                stepBackButton.disabled = isPython;
-
-                if (isPython) {
-                    setRunStatus("Pythonモード (実行不可)", "status-error");
-                    displayOutput("Pythonモードが選択されました。このモードではプログラムの実行はできません。", false);
-                } else {
-                    setRunStatus("待機中");
-                }
-            });
-
             // --- コード表示モーダルの設定 ---
             const codeModal = document.getElementById('codeModal');
             document.getElementById('showCodeButton').addEventListener('click', () => {
-                const language = document.getElementById('languageSelector').value;
                 const modalTitle = document.querySelector('#codeModal .modal-header h2');
                 let finalCode = '';
 
                 try {
-                    if (language === 'Python') {
-                        modalTitle.textContent = '生成されたコード (Python)';
-                        finalCode = Blockly.Python.workspaceToCode(workspace);
-                    } else { // JavaScript
-                        modalTitle.textContent = '生成されたコード (JavaScript)';
-                        const allVariables = workspace.getAllVariables();
-                        const varNames = allVariables.map(v => v.name);
-                        const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : '';
-                        const blockCode = Blockly.JavaScript.workspaceToCode(workspace);
-                        finalCode = declarationString + blockCode;
-                    }
+                    modalTitle.textContent = '生成されたコード (Python)';
+                    finalCode = Blockly.Python.workspaceToCode(workspace);
+
                     document.getElementById('jsCodeDiv').textContent = finalCode;
                     codeModal.style.display = 'flex';
                 } catch (e) {
@@ -2136,6 +2148,34 @@
             document.getElementById('modalCloseButton').addEventListener('click', () => { codeModal.style.display = 'none'; });
             codeModal.addEventListener('click', (e) => { if (e.target === codeModal) { codeModal.style.display = 'none'; } }); // 背景クリックで閉じる
 
+            // --- Pythonインポートモーダルの設定 ---
+            const pythonImportModal = document.getElementById('pythonImportModal');
+            document.getElementById('importFromPythonButton').addEventListener('click', () => {
+                pythonImportModal.style.display = 'flex';
+            });
+            document.getElementById('pythonImportModalCloseButton').addEventListener('click', () => {
+                pythonImportModal.style.display = 'none';
+            });
+            pythonImportModal.addEventListener('click', (e) => {
+                if (e.target === pythonImportModal) {
+                    pythonImportModal.style.display = 'none';
+                }
+            });
+
+            document.getElementById('convertPythonButton').addEventListener('click', () => {
+                const pythonCode = document.getElementById('pythonCodeTextarea').value;
+                try {
+                    const xmlText = convertPythonToBlockly(pythonCode);
+                    const xml = Blockly.utils.xml.textToDom(xmlText);
+                    workspace.clear();
+                    Blockly.Xml.domToWorkspace(xml, workspace);
+                    pythonImportModal.style.display = 'none'; // 成功したら閉じる
+                } catch (e) {
+                    alert("Pythonコードの変換に失敗しました。\n" + e.message);
+                    console.error("Python to Blockly conversion error:", e);
+                }
+            });
+
             // --- 実行終了モーダルの設定 ---
             const executionFinishedModal = document.getElementById('executionFinishedModal');
             const executionFinishedModalCloseButton = document.getElementById('executionFinishedModalCloseButton');
@@ -2145,6 +2185,513 @@
             // --- リサイザーの初期化 ---
             setupResizer(document.getElementById('resizerV'), true);
             setupResizer(document.getElementById('resizerH'), false);
+
+            //======================================================================
+            // PythonからBlocklyへの変換
+            //======================================================================
+            /**
+             * Pythonコードの文字列をBlocklyのXMLに変換する
+             * @param {string} pythonCode 変換するPythonコード
+             * @returns {string} Blockly XML文字列
+             */
+            function convertPythonToBlockly(pythonCode) {
+                const lines = pythonCode.split('\n');
+                // --- Pass 1: Build Abstract Syntax Tree (AST) ---
+                function buildAst() {
+                    const root = { type: 'ROOT', children: [], indent: -1 };
+                    const stack = [root];
+
+                    function getNodeType(line) {
+                        if (line.trim() === 'break') return 'break';
+                        if (line.startsWith('def ')) return 'func_def';
+                        if (line.startsWith('while ')) return 'while';
+                        if (line.startsWith('for ')) return 'for';
+                        if (line.startsWith('if ')) return 'if';
+                        if (line.startsWith('elif ')) return 'elif';
+                        if (line.startsWith('else:')) return 'else';
+                        if (line.startsWith('print(')) return 'print';
+                        if (line.includes('=')) return 'assign';
+                        if (line.match(/^[a-zA-Z_][a-zA-Z0-9_]*\(.*\)$/)) return 'func_call';
+                        return 'unknown';
+                    }
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || trimmed.startsWith('#')) continue;
+
+                        const indent = line.match(/^\s*/)[0].length;
+                        const node = {
+                            type: getNodeType(trimmed),
+                            content: trimmed,
+                            children: [],
+                            indent: indent
+                        };
+
+                        while (stack[stack.length - 1].indent >= indent) {
+                            stack.pop();
+                        }
+
+                        stack[stack.length - 1].children.push(node);
+                        stack.push(node);
+                    }
+                    return root;
+                }
+
+                // --- Pass 2: Generate XML from AST ---
+                let y = 10;
+                function generateXml(nodes) {
+                    let xml = '';
+                    let i = 0;
+                    while (i < nodes.length) {
+                        const node = nodes[i];
+
+                        // Break statements (ignored)
+                        if (node.type === 'break') {
+                            i++;
+                        }
+                        // Function Definition
+                        else if (node.type === 'func_def') {
+                            xml += generateFuncDefXml(node);
+                            i++;
+                        }
+                        // Function Call
+                        else if (node.type === 'func_call') {
+                            xml += parseStatementXml(node.content); // Reuse statement parser for this
+                            i++;
+                        }
+                        // while ループ
+                        else if (node.type === 'while') {
+                            xml += generateWhileLoopXml(node);
+                            i++;
+                        }
+                        // for ループ
+                        else if (node.type === 'for') {
+                            xml += generateForLoopXml(node);
+                            i++;
+                        }
+                        // if-elif-elseチェーンをグループとして処理
+                        else if (node.type === 'if') {
+                            const chain = [node];
+                            let j = i + 1;
+                            while (j < nodes.length && (nodes[j].type === 'elif' || nodes[j].type === 'else')) {
+                                chain.push(nodes[j]);
+                                j++;
+                            }
+
+                            const { xml: chainXml, consumed } = generateIfChainXml(chain);
+                            xml += chainXml;
+                            i += consumed;
+                        } else { // その他のステートメント
+                            const statementXml = parseStatementXml(node.content);
+                            if (statementXml) {
+                                xml += statementXml.replace('<block', `<block y="${y}"`);
+                                y += 70;
+                            }
+                            i++;
+                        }
+
+                        // 次のブロックとの接続
+                        if (i < nodes.length && xml) {
+                            const nextXml = generateXml(nodes.slice(i));
+                            if(nextXml) {
+                                xml = xml.replace(/<\/block>\s*$/, `<next>${nextXml}</next></block>`);
+                            }
+                            break;
+                        }
+                    }
+                    return xml;
+                }
+
+                function generateIfChainXml(chain) {
+                    if (!chain || chain.length === 0) {
+                        return { xml: '', consumed: 0 };
+                    }
+
+                    const head = chain[0];
+                    const tail = chain.slice(1);
+
+                    // Base case: 'else' block
+                    if (head.type === 'else') {
+                        const doXml = generateXml(head.children);
+                        return { xml: doXml, consumed: 1 };
+                    }
+
+                    // 'if' or 'elif' block
+                    const conditionMatch = head.content.match(/^(if|elif)\s+(.*):$/);
+                    const conditionXml = parseConditionXml(conditionMatch[2]);
+                    const doXml = generateXml(head.children);
+
+                    let elseXml = '';
+                    let consumed = 1;
+                    if (tail.length > 0) {
+                        const { xml: nextChainXml, consumed: nextConsumed } = generateIfChainXml(tail);
+                        elseXml = nextChainXml;
+                        consumed += nextConsumed;
+                    }
+
+                    let finalXml;
+                    if (elseXml) {
+                        finalXml = `
+                        <block type="if_else_statement">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO0">${doXml}</statement>
+                            <statement name="ELSE">${elseXml}</statement>
+                        </block>`;
+                    } else {
+                        finalXml = `
+                        <block type="if_statement">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
+                    }
+
+                    return { xml: finalXml.replace('<block', `<block y="${y}"`), consumed: consumed };
+                }
+
+                function generateFuncDefXml(node) {
+                    const match = node.content.match(/^def\s+([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\):$/);
+                    if (!match) return '';
+
+                    const funcName = match[1];
+                    const args = match[2].split(',').map(s => s.trim()).filter(s => s);
+                    const doXml = generateXml(node.children);
+
+                    let argsXml = '';
+                    if (args.length > 0) {
+                        argsXml = '<mutation>';
+                        for (const arg of args) {
+                            argsXml += `<arg name="${arg}"></arg>`;
+                        }
+                        argsXml += '</mutation>';
+                    }
+
+                    return `
+                        <block type="procedures_defnoreturn" y="${y}">
+                            ${argsXml}
+                            <field name="NAME">${funcName}</field>
+                            <statement name="STACK">${doXml}</statement>
+                        </block>`;
+                }
+
+                function generateWhileLoopXml(node) {
+                    const match = node.content.match(/^while\s+(.*):$/);
+                    if (!match) return '';
+
+                    const conditionXml = parseValueXml(match[1].trim());
+                    const doXml = generateXml(node.children);
+
+                    return `
+                        <block type="while_loop" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
+                }
+
+                function generateForLoopXml(node) {
+                    // Case 1: for i in range(...)
+                    const rangeMatch = node.content.match(/^for\s+(.*)\s+in\s+range\((.*)\):$/);
+                    if (rangeMatch) {
+                        const varName = rangeMatch[1];
+                        const rangeArgs = rangeMatch[2].split(',');
+
+                        let fromXml, toXml, stepXml;
+                        if (rangeArgs.length === 1) { // range(N)
+                            fromXml = '<block type="number_literal"><field name="NUM">0</field></block>';
+                            toXml = parseValueXml(rangeArgs[0].trim() + " - 1");
+                            stepXml = '<block type="number_literal"><field name="NUM">1</field></block>';
+                        } else { // range(start, stop, [step])
+                            fromXml = parseValueXml(rangeArgs[0].trim());
+                            toXml = parseValueXml(rangeArgs[1].trim() + " - 1");
+                            stepXml = rangeArgs.length > 2 ? parseValueXml(rangeArgs[2].trim()) : '<block type="number_literal"><field name="NUM">1</field></block>';
+                        }
+
+                        const doXml = generateXml(node.children);
+
+                        return `
+                            <block type="for_loop" y="${y}">
+                                <field name="VAR">${varName}</field>
+                                <value name="FROM">${fromXml}</value>
+                                <value name="TO">${toXml}</value>
+                                <value name="STEP">${stepXml}</value>
+                                <statement name="DO">${doXml}</statement>
+                            </block>`;
+                    }
+
+                    // Case 2: for x in list
+                    const listMatch = node.content.match(/^for\s+(.*)\s+in\s+(.*):$/);
+                    if (listMatch) {
+                        // This is complex to convert directly. We simulate it:
+                        // for _i in range(0, len(list)):
+                        //   x = list[_i]
+                        // NOTE: This is a major simplification and has limitations.
+                        const itemVar = listMatch[1];
+                        const listVar = listMatch[2];
+                        const indexVar = `_i_${itemVar}`; // A temporary index variable
+
+                        // Inner block: x = list[_i]
+                        const assignmentXml = `
+                            <block type="assignment">
+                                <field name="VAR">${itemVar}</field>
+                                <value name="VALUE">
+                                    <block type="array_access_1d">
+                                        <field name="ARRAY">${listVar}</field>
+                                        <value name="INDEX">
+                                            <block type="variable_access">
+                                                <field name="VAR">${indexVar}</field>
+                                            </block>
+                                        </value>
+                                    </block>
+                                </value>
+                            </block>`;
+
+                        const userBlocksXml = generateXml(node.children);
+                        let doXml = assignmentXml;
+                        if (userBlocksXml) {
+                            const lastIndex = doXml.lastIndexOf('</block>');
+                            if (lastIndex !== -1) {
+                                doXml = doXml.slice(0, lastIndex) + `<next>${userBlocksXml}</next>` + doXml.slice(lastIndex);
+                            }
+                        }
+
+                        // There's no direct way to get array length in this block system.
+                        // This is a significant limitation of the target environment.
+                        // We will have to assume a placeholder or a magic block if one existed.
+                        // For now, let's just hardcode a high number as a placeholder.
+                        const toXml = '<block type="number_literal"><field name="NUM">100</field></block>'; // Placeholder
+
+                        return `
+                            <block type="for_loop" y="${y}">
+                                <field name="VAR">${indexVar}</field>
+                                <value name="FROM"><block type="number_literal"><field name="NUM">0</field></block></value>
+                                <value name="TO">${toXml}</value>
+                                <value name="STEP"><block type="number_literal"><field name="NUM">1</field></block></value>
+                                <statement name="DO">${doXml}</statement>
+                            </block>`;
+                    }
+
+                    return '';
+                }
+
+                function processNode(nodes, index) {
+                    const node = nodes[index];
+                    const content = node.content;
+                    let match;
+
+                    // --- IF/ELIF/ELSE ---
+                    if (content.startsWith('if') || content.startsWith('elif') || content.startsWith('else')) {
+                        return processIfChain(nodes, index);
+                    }
+
+                    // --- Single Statement ---
+                    let xml = parseStatementXml(content);
+                    if(xml) {
+                         xml = xml.replace('<block', `<block y="${y}"`);
+                         y += 70;
+                    }
+                    return { xml: xml, consumedNodes: 1 };
+                }
+
+                function processIfChain(nodes, index) {
+                    const startNode = nodes[index];
+                    const ifMatch = startNode.content.match(/^(if|elif)\s+(.*):$/);
+                    const elseMatch = startNode.content.match(/^else:$/);
+
+                    if (!ifMatch && !elseMatch) return { xml: '', consumedNodes: 1};
+
+                    let conditionXml = ifMatch ? parseConditionXml(ifMatch[2]) : '';
+                    let doXml = generateXml(startNode.children);
+
+                    let consumed = 1;
+                    let elseXml = '';
+
+                    if (index + 1 < nodes.length) {
+                        const nextNode = nodes[index + 1];
+                        if (nextNode.content.startsWith('elif') || nextNode.content.startsWith('else')) {
+                            const { xml: nextChainXml, consumedNodes: nextConsumed } = processIfChain(nodes, index + 1);
+                            elseXml = nextChainXml;
+                            consumed += nextConsumed;
+                        }
+                    }
+
+                    if (elseMatch) { // else節は前のifのELSEに繋がる
+                        return { xml: doXml, consumedNodes: consumed };
+                    }
+
+                    let finalXml;
+                    if (elseXml) {
+                        finalXml = `
+                        <block type="if_else_statement" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO0">${doXml}</statement>
+                            <statement name="ELSE">${elseXml}</statement>
+                        </block>`;
+                    } else {
+                        finalXml = `
+                        <block type="if_statement" y="${y}">
+                            <value name="CONDITION">${conditionXml}</value>
+                            <statement name="DO">${doXml}</statement>
+                        </block>`;
+                    }
+                    y+= 150;
+
+                    return { xml: finalXml, consumedNodes: consumed };
+                }
+
+                function parseConditionXml(conditionStr) {
+                    const compMatch = conditionStr.match(/(.*)\s*(==|!=|>|<|>=|<=)\s*(.*)/);
+                    if (compMatch) {
+                        const [_, lhs, op, rhs] = compMatch;
+                        return `
+                            <block type="comparison">
+                                <field name="OP">${op.replace('==', '===')}</field>
+                                <value name="A">${parseValueXml(lhs.trim())}</value>
+                                <value name="B">${parseValueXml(rhs.trim())}</value>
+                            </block>`;
+                    }
+                    return '<block type="logic_boolean"><field name="BOOL">TRUE</field></block>';
+                }
+
+                function parseValueXml(expression) {
+                    expression = expression.trim();
+
+                    // Handle parentheses and int() casting
+                    if (expression.startsWith('(') && expression.endsWith(')')) {
+                        return parseValueXml(expression.slice(1, -1));
+                    }
+                    if (expression.startsWith('int(') && expression.endsWith(')')) {
+                        return parseValueXml(expression.slice(4, -1));
+                    }
+
+                    // Lowest precedence: + and -
+                    let i = expression.length - 1;
+                    let parenCount = 0;
+                    while (i >= 0) {
+                        const char = expression[i];
+                        if (char === ')') parenCount++;
+                        else if (char === '(') parenCount--;
+                        else if (parenCount === 0 && (char === '+' || char === '-')) {
+                             return `
+                                <block type="arithmetic">
+                                    <field name="OP">${char}</field>
+                                    <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                                    <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                                </block>`;
+                        }
+                        i--;
+                    }
+
+                    // Next precedence: * and /
+                    i = expression.length - 1;
+                    parenCount = 0;
+                    while (i >= 0) {
+                        const char = expression[i];
+                        if (char === ')') parenCount++;
+                        else if (char === '(') parenCount--;
+                        else if (parenCount === 0 && (char === '*' || char === '/')) {
+                            const op = char === '*' ? '*' : '/'; // Use '*' for value, not '×'
+                            return `
+                                <block type="arithmetic">
+                                    <field name="OP">${op}</field>
+                                    <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                                    <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                                </block>`;
+                        }
+                        i--;
+                    }
+
+                    // Base cases
+                    // Array access
+                    const arrayAccessMatch = expression.match(/^(.*)\[(.*)\]$/);
+                    if (arrayAccessMatch) {
+                        return `
+                            <block type="array_access_1d">
+                                <field name="ARRAY">${arrayAccessMatch[1]}</field>
+                                <value name="INDEX">${parseValueXml(arrayAccessMatch[2])}</value>
+                            </block>`;
+                    }
+
+                    if (!isNaN(Number(expression))) {
+                        return `<block type="number_literal"><field name="NUM">${expression}</field></block>`;
+                    }
+                    if (expression.startsWith('"') && expression.endsWith('"')) {
+                        return `<block type="string_literal"><field name="TEXT">${expression.slice(1, -1)}</field></block>`;
+                    }
+                    return `<block type="variable_access"><field name="VAR">${expression}</field></block>`;
+                }
+
+                function parseStatementXml(content) {
+                    let match;
+
+                    // --- Augmenting Assignment (+=) ---
+                    const augmentMatch = content.match(/^(.*)\s*(\+=)\s*(.*)$/);
+                    if (augmentMatch) {
+                        const varName = augmentMatch[1].trim();
+                        const value = augmentMatch[3].trim();
+                        const arithmeticXml = parseValueXml(`${varName} + ${value}`);
+                        return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${arithmeticXml}</value></block>`;
+                    }
+
+                    // --- Swap Pattern ---
+                    const swapMatch = content.match(/^(.*?),\s*(.*?)\s*=\s*(.*?),\s*(.*?)$/);
+                    if (swapMatch && swapMatch[1].trim() === swapMatch[4].trim() && swapMatch[2].trim() === swapMatch[3].trim()) {
+                        const a = swapMatch[1].trim();
+                        const b = swapMatch[2].trim();
+                        const tempVar = `_temp_swap`;
+
+                        const temp_equals_a = `<block type="assignment"><field name="VAR">${tempVar}</field><value name="VALUE">${parseValueXml(a)}</value></block>`;
+                        const a_equals_b = `<block type="assignment"><field name="VAR">${a}</field><value name="VALUE">${parseValueXml(b)}</value></block>`;
+                        const b_equals_temp = `<block type="assignment"><field name="VAR">${b}</field><value name="VALUE">${parseValueXml(tempVar)}</value></block>`;
+
+                        // Chain them together
+                        return temp_equals_a.replace('</block>', `<next>${a_equals_b.replace('</block>', `<next>${b_equals_temp}</next></block>`)}</next></block>`);
+                    }
+
+                    // --- Assignment ---
+                    if ((match = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/))) {
+                        const varName = match[1];
+                        const valueStr = match[2].trim();
+                        // random.choice
+                        if (valueStr.startsWith('random.choice')) {
+                            const listVar = valueStr.match(/random\.choice\((.*)\)/)[1].trim();
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_choice"><value name="LIST"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block></value></block>`;
+                        }
+                        // random.random
+                        if (valueStr.startsWith('random.random')) {
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_float"></block></value></block>`;
+                        }
+                        // input
+                        if (valueStr.startsWith('input')) {
+                            return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="external_input"><field name="TYPE">STRING</field></block></value></block>`;
+                        }
+                        // list
+                        if (valueStr.startsWith('[')) {
+                            const elements = valueStr.slice(1, -1).split(',').map(s => s.trim().replace(/"/g, ''));
+                            return `<block type="array_assignment_full"><field name="ARRAY">${varName}</field><field name="ELEMENTS">${elements.join(',')}</field></block>`;
+                        }
+                        // simple assignment
+                        return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${parseValueXml(valueStr)}</value></block>`;
+                    }
+                    // --- Print ---
+                    if (content.startsWith('print(')) {
+                        const match = content.match(/^print\((.*)\)$/);
+                        const arg = match[1].trim();
+                        const formatMatch = arg.match(/^"(.*){}"\.format\((.*)\)$/);
+                        if (formatMatch) {
+                            const textPart = formatMatch[1];
+                            const varPart = formatMatch[2].trim();
+                            return `<block type="display"><mutation items="2"></mutation><field name="NEWLINE">TRUE</field><value name="ADD0"><block type="string_literal"><field name="TEXT">${textPart}</field></block></value><value name="ADD1"><block type="variable_access"><field name="VAR">${varPart}</field></block></value></block>`;
+                        }
+                        return `<block type="simple_display"><field name="NEWLINE">TRUE</field><value name="VALUE">${parseValueXml(arg)}</value></block>`;
+                    }
+                    return '';
+                }
+
+                const ast = buildAst();
+                console.log("Generated AST:", JSON.stringify(ast, null, 2));
+                const topLevelXml = generateXml(ast.children);
+                console.log("Generated XML:", topLevelXml);
+                return `<xml xmlns="https://developers.google.com/blockly/xml">${topLevelXml}</xml>`;
+            }
 
             // --- ウィンドウリサイズ時の処理 ---
             window.addEventListener('resize', () => Blockly.svgResize(workspace));
