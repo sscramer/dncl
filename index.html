@@ -552,6 +552,7 @@
             <block type="array_assignment_full_2d"></block>
             <block type="array_access_1d"></block>
             <block type="array_access_2d"></block>
+            <block type="array_length"></block>
         </category>
         <category name="計算" colour="230">
             <block type="arithmetic"></block>
@@ -1254,6 +1255,7 @@
                 { "type": "array_assignment_full_2d", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "1,2;3,4" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列全体に値を代入する（行はセミコロン、要素はカンマ区切り）" },
                 { "type": "array_access_1d", "message0": "%1 [ %2 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }], "output": null, "colour": 260, "tooltip": "1次元配列の要素を参照する" },
                 { "type": "array_access_2d", "message0": "%1 [ %2, %3 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }], "output": null, "colour": 260, "tooltip": "2次元配列の要素を参照する" },
+                { "type": "array_length", "message0": "配列または文字列 %1 の長さ", "args0": [{ "type": "input_value", "name": "ARRAY", "check": ["Array", "String"] }], "output": "Number", "colour": 260, "tooltip": "配列または文字列の長さを返します" },
                 { "type": "arithmetic", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Number" }, { "type": "field_dropdown", "name": "OP", "options": [["+", "+"], ["-", "-"], ["×", "*"], ["/", "/"], ["÷", "÷"], ["%", "%"]] }, { "type": "input_value", "name": "B", "check": "Number" }], "inputsInline": true, "output": "Number", "colour": 230, "tooltip": "算術演算" },
                 // [FIX] 比較演算子の表示を変更し、インライン表示を明示
                 { "type": "comparison", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A" }, { "type": "field_dropdown", "name": "OP", "options": [["==", "==="], ["!=", "!=="], [">", ">"], [">=", ">="], ["<", "<"], ["<=", "<="]] }, { "type": "input_value", "name": "B" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "比較演算子" },
@@ -1309,6 +1311,7 @@
             Blockly.JavaScript['array_assignment_full_2d'] = function (block) { const arr = block.getFieldValue('ARRAY'); const elementsText = block.getFieldValue('ELEMENTS') || ''; const rows = elementsText.split(';').map(rowText => { const elements = rowText.split(',').map(e => { const trimmed = e.trim(); return isNaN(Number(trimmed)) ? JSON.stringify(trimmed) : Number(trimmed); }); return `[${elements.join(',')}]`; }); return `${arr} = [${rows.join(',')}];\nnativeLog('${arr}', ${arr});\n`; };
             Blockly.JavaScript['array_access_1d'] = (block) => [`safeArrayAccess(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['array_access_2d'] = (block) => [`safeArrayAccess2d(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+            Blockly.JavaScript['array_length'] = function(block) { const array = Blockly.JavaScript.valueToCode(block, 'ARRAY', ORDER_MEMBER) || '[]'; return [array + '.length', ORDER_MEMBER]; };
             Blockly.JavaScript['arithmetic'] = function (block) { if (block.getFieldValue('OP') === '÷') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.floor(${a} / ${b})`, ORDER_FUNCTION_CALL]; } const OPERATORS = { '+': [' + ', ORDER_ADDITION], '-': [' - ', ORDER_SUBTRACTION], '*': [' * ', ORDER_MULTIPLICATION], '/': [' / ', ORDER_DIVISION], '%': [' % ', ORDER_MODULUS], }; const tuple = OPERATORS[block.getFieldValue('OP')]; const operator = tuple[0]; const order = tuple[1]; const argument0 = Blockly.JavaScript.valueToCode(block, 'A', order) || '0'; const argument1 = Blockly.JavaScript.valueToCode(block, 'B', order) || '0'; const code = argument0 + operator + argument1; return [code, order]; };
             Blockly.JavaScript['comparison'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'A', ORDER_RELATIONAL) || '0'} ${block.getFieldValue('OP')} ${Blockly.JavaScript.valueToCode(block, 'B', ORDER_RELATIONAL) || '0'})`, ORDER_RELATIONAL];
             Blockly.JavaScript['logic_operation_jp'] = (block) => { const op = block.getFieldValue('OP'); const order = op === '&&' ? ORDER_LOGICAL_AND : ORDER_LOGICAL_OR; return [`(${Blockly.JavaScript.valueToCode(block, 'A', order) || 'false'} ${op} ${Blockly.JavaScript.valueToCode(block, 'B', order) || 'false'})`, order]; };
@@ -1520,6 +1523,11 @@
                 let idx = Blockly.Python.valueToCode(block, 'INDEX', Blockly.Python.ORDER_NONE) || '0';
                 const idx_access = oneBasedMode ? `int(${idx}) - 1` : `int(${idx})`;
                 return [`${arr}[${idx_access}]`, Blockly.Python.ORDER_MEMBER];
+            };
+
+            Blockly.Python['array_length'] = function(block) {
+                const list = Blockly.Python.valueToCode(block, 'ARRAY', Blockly.Python.ORDER_NONE) || '[]';
+                return ['len(' + list + ')', Blockly.Python.ORDER_FUNCTION_CALL];
             };
 
             Blockly.Python['array_access_2d'] = function(block) {
@@ -2453,11 +2461,12 @@
                             }
                         }
 
-                        // There's no direct way to get array length in this block system.
-                        // This is a significant limitation of the target environment.
-                        // We will have to assume a placeholder or a magic block if one existed.
-                        // For now, let's just hardcode a high number as a placeholder.
-                        const toXml = '<block type="number_literal"><field name="NUM">100</field></block>'; // Placeholder
+                        // Generate a block to get the length of the list
+                        const lenBlock = `<block type="array_length"><value name="ARRAY"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block>`;
+
+                        // The loop should go from 0 to len(list) - 1.
+                        // Our for_loop block is inclusive, so the 'to' value should be len(list) - 1.
+                        const toXml = `<block type="arithmetic"><field name="OP">-</field><value name="A">${lenBlock}</value><value name="B"><block type="number_literal"><field name="NUM">1</field></block></value></block>`;
 
                         return `
                             <block type="for_loop" y="${y}">
@@ -2553,6 +2562,12 @@
 
                 function parseValueXml(expression) {
                     expression = expression.trim();
+
+                    // Handle len()
+                    const lenMatch = expression.match(/^len\((.*)\)$/);
+                    if (lenMatch) {
+                        return `<block type="array_length"><value name="ARRAY">${parseValueXml(lenMatch[1])}</value></block>`;
+                    }
 
                     // Handle parentheses and int() casting
                     if (expression.startsWith('(') && expression.endsWith(')')) {

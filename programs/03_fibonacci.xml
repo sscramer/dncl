@@ -1,0 +1,178 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="assignment" id="fib_prog_1">
+    <field name="VAR">n</field>
+    <value name="VALUE">
+      <block type="number_literal" id="fib_prog_2">
+        <field name="NUM">15</field>
+      </block>
+    </value>
+    <next>
+      <block type="if_else_statement" id="fib_prog_3">
+        <value name="CONDITION">
+          <block type="comparison" id="fib_prog_4">
+            <field name="OP">===</field>
+            <value name="A">
+              <block type="variable_access" id="fib_prog_5">
+                <field name="VAR">n</field>
+              </block>
+            </value>
+            <value name="B">
+              <block type="number_literal" id="fib_prog_6">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="assignment" id="fib_prog_7">
+            <field name="VAR">result</field>
+            <value name="VALUE">
+              <block type="number_literal" id="fib_prog_8">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="if_else_statement" id="fib_prog_9">
+            <value name="CONDITION">
+              <block type="comparison" id="fib_prog_10">
+                <field name="OP">===</field>
+                <value name="A">
+                  <block type="variable_access" id="fib_prog_11">
+                    <field name="VAR">n</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="number_literal" id="fib_prog_12">
+                    <field name="NUM">1</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="assignment" id="fib_prog_13">
+                <field name="VAR">result</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="fib_prog_14">
+                    <field name="NUM">1</field>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="assignment" id="fib_prog_15">
+                <field name="VAR">a</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="fib_prog_16">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="assignment" id="fib_prog_17">
+                    <field name="VAR">b</field>
+                    <value name="VALUE">
+                      <block type="number_literal" id="fib_prog_18">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="for_loop" id="fib_prog_19">
+                        <field name="VAR">i</field>
+                        <value name="FROM">
+                          <block type="number_literal" id="fib_prog_20">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <value name="TO">
+                          <block type="arithmetic" id="fib_prog_21">
+                            <field name="OP">-</field>
+                            <value name="A">
+                              <block type="variable_access" id="fib_prog_22">
+                                <field name="VAR">n</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="number_literal" id="fib_prog_23">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="STEP">
+                          <block type="number_literal" id="fib_prog_24">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <statement name="DO">
+                          <block type="assignment" id="fib_prog_25">
+                            <field name="VAR">next_b</field>
+                            <value name="VALUE">
+                              <block type="arithmetic" id="fib_prog_26">
+                                <field name="OP">+</field>
+                                <value name="A">
+                                  <block type="variable_access" id="fib_prog_27">
+                                    <field name="VAR">a</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variable_access" id="fib_prog_28">
+                                    <field name="VAR">b</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="assignment" id="fib_prog_29">
+                                <field name="VAR">a</field>
+                                <value name="VALUE">
+                                  <block type="variable_access" id="fib_prog_30">
+                                    <field name="VAR">b</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="assignment" id="fib_prog_31">
+                                    <field name="VAR">b</field>
+                                    <value name="VALUE">
+                                      <block type="variable_access" id="fib_prog_32">
+                                        <field name="VAR">next_b</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="assignment" id="fib_prog_33">
+                            <field name="VAR">result</field>
+                            <value name="VALUE">
+                              <block type="variable_access" id="fib_prog_34">
+                                <field name="VAR">b</field>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+        <next>
+          <block type="simple_display" id="fib_prog_35">
+            <field name="NEWLINE">TRUE</field>
+            <value name="VALUE">
+              <block type="variable_access" id="fib_prog_36">
+                <field name="VAR">result</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

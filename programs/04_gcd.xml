@@ -1,0 +1,89 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="assignment" id="gcd_prog_1">
+    <field name="VAR">a</field>
+    <value name="VALUE">
+      <block type="number_literal" id="gcd_prog_2">
+        <field name="NUM">54</field>
+      </block>
+    </value>
+    <next>
+      <block type="assignment" id="gcd_prog_3">
+        <field name="VAR">b</field>
+        <value name="VALUE">
+          <block type="number_literal" id="gcd_prog_4">
+            <field name="NUM">24</field>
+          </block>
+        </value>
+        <next>
+          <block type="while_loop" id="gcd_prog_5">
+            <value name="CONDITION">
+              <block type="comparison" id="gcd_prog_6">
+                <field name="OP">!==</field>
+                <value name="A">
+                  <block type="variable_access" id="gcd_prog_7">
+                    <field name="VAR">b</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="number_literal" id="gcd_prog_8">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO">
+              <block type="assignment" id="gcd_prog_9">
+                <field name="VAR">temp</field>
+                <value name="VALUE">
+                  <block type="variable_access" id="gcd_prog_10">
+                    <field name="VAR">b</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="assignment" id="gcd_prog_11">
+                    <field name="VAR">b</field>
+                    <value name="VALUE">
+                      <block type="arithmetic" id="gcd_prog_12">
+                        <field name="OP">%</field>
+                        <value name="A">
+                          <block type="variable_access" id="gcd_prog_13">
+                            <field name="VAR">a</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variable_access" id="gcd_prog_14">
+                            <field name="VAR">b</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="assignment" id="gcd_prog_15">
+                        <field name="VAR">a</field>
+                        <value name="VALUE">
+                          <block type="variable_access" id="gcd_prog_16">
+                            <field name="VAR">temp</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="simple_display" id="gcd_prog_17">
+                <field name="NEWLINE">TRUE</field>
+                <value name="VALUE">
+                  <block type="variable_access" id="gcd_prog_18">
+                    <field name="VAR">a</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

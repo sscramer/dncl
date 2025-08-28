@@ -1,0 +1,155 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="assignment" id="change_prog_1">
+    <field name="VAR">amount</field>
+    <value name="VALUE">
+      <block type="number_literal" id="change_prog_2">
+        <field name="NUM">93</field>
+      </block>
+    </value>
+    <next>
+      <block type="array_assignment_full" id="change_prog_3">
+        <field name="ARRAY">coins</field>
+        <field name="ELEMENTS">25,10,5,1</field>
+        <next>
+          <block type="assignment" id="change_prog_4">
+            <field name="VAR">num_coin_types</field>
+            <value name="VALUE">
+              <block type="array_length" id="change_prog_len">
+                <value name="ARRAY">
+                  <block type="variable_access">
+                    <field name="VAR">coins</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="assignment" id="change_prog_6">
+                <field name="VAR">total_coin_count</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="change_prog_7">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="for_loop" id="change_prog_8">
+                    <field name="VAR">i</field>
+                    <value name="FROM">
+                      <block type="number_literal" id="change_prog_9">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <value name="TO">
+                      <block type="arithmetic" id="change_prog_10">
+                        <field name="OP">-</field>
+                        <value name="A">
+                          <block type="variable_access" id="change_prog_11">
+                            <field name="VAR">num_coin_types</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="number_literal" id="change_prog_12">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="STEP">
+                      <block type="number_literal" id="change_prog_13">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <statement name="DO">
+                      <block type="assignment" id="change_prog_14">
+                        <field name="VAR">coin_value</field>
+                        <value name="VALUE">
+                          <block type="array_access_1d" id="change_prog_15">
+                            <field name="ARRAY">coins</field>
+                            <value name="INDEX">
+                              <block type="variable_access" id="change_prog_16">
+                                <field name="VAR">i</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="assignment" id="change_prog_17">
+                            <field name="VAR">count</field>
+                            <value name="VALUE">
+                              <block type="arithmetic" id="change_prog_18">
+                                <field name="OP">÷</field>
+                                <value name="A">
+                                  <block type="variable_access" id="change_prog_19">
+                                    <field name="VAR">amount</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variable_access" id="change_prog_20">
+                                    <field name="VAR">coin_value</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="assignment" id="change_prog_21">
+                                <field name="VAR">total_coin_count</field>
+                                <value name="VALUE">
+                                  <block type="arithmetic" id="change_prog_22">
+                                    <field name="OP">+</field>
+                                    <value name="A">
+                                      <block type="variable_access" id="change_prog_23">
+                                        <field name="VAR">total_coin_count</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variable_access" id="change_prog_24">
+                                        <field name="VAR">count</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="assignment" id="change_prog_25">
+                                    <field name="VAR">amount</field>
+                                    <value name="VALUE">
+                                      <block type="arithmetic" id="change_prog_26">
+                                        <field name="OP">%</field>
+                                        <value name="A">
+                                          <block type="variable_access" id="change_prog_27">
+                                            <field name="VAR">amount</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variable_access" id="change_prog_28">
+                                            <field name="VAR">coin_value</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="simple_display" id="change_prog_29">
+                        <field name="NEWLINE">TRUE</field>
+                        <value name="VALUE">
+                          <block type="variable_access" id="change_prog_30">
+                            <field name="VAR">total_coin_count</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

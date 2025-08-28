@@ -1,0 +1,267 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="array_assignment_full" id="bsearch_prog_1">
+    <field name="ARRAY">haystack</field>
+    <field name="ELEMENTS">25,45,72,87,100</field>
+    <next>
+      <block type="assignment" id="bsearch_prog_2">
+        <field name="VAR">needle</field>
+        <value name="VALUE">
+          <block type="number_literal" id="bsearch_prog_3">
+            <field name="NUM">72</field>
+          </block>
+        </value>
+        <next>
+          <block type="assignment" id="bsearch_prog_n">
+            <field name="VAR">n</field>
+            <value name="VALUE">
+              <block type="array_length" id="bsearch_prog_len">
+                <value name="ARRAY">
+                  <block type="variable_access">
+                    <field name="VAR">haystack</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="assignment" id="bsearch_prog_4">
+                <field name="VAR">found_index</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="bsearch_prog_5">
+                    <field name="NUM">-1</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="assignment" id="bsearch_prog_6">
+                    <field name="VAR">low</field>
+                    <value name="VALUE">
+                      <block type="number_literal" id="bsearch_prog_7">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="assignment" id="bsearch_prog_8">
+                        <field name="VAR">high</field>
+                        <value name="VALUE">
+                          <block type="arithmetic">
+                            <field name="OP">-</field>
+                            <value name="A">
+                              <block type="variable_access">
+                                <field name="VAR">n</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="number_literal">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="assignment" id="bsearch_prog_10">
+                            <field name="VAR">searching</field>
+                            <value name="VALUE">
+                              <block type="number_literal" id="bsearch_prog_11">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="while_loop" id="bsearch_prog_12">
+                                <value name="CONDITION">
+                                  <block type="logic_operation_jp" id="bsearch_prog_13">
+                                    <field name="OP">&amp;&amp;</field>
+                                    <value name="A">
+                                      <block type="comparison" id="bsearch_prog_14">
+                                        <field name="OP">&lt;=</field>
+                                        <value name="A">
+                                          <block type="variable_access" id="bsearch_prog_15">
+                                            <field name="VAR">low</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variable_access" id="bsearch_prog_16">
+                                            <field name="VAR">high</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="comparison" id="bsearch_prog_17">
+                                        <field name="OP">===</field>
+                                        <value name="A">
+                                          <block type="variable_access" id="bsearch_prog_18">
+                                            <field name="VAR">searching</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="number_literal" id="bsearch_prog_19">
+                                            <field name="NUM">1</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO">
+                                  <block type="assignment" id="bsearch_prog_20">
+                                    <field name="VAR">mid</field>
+                                    <value name="VALUE">
+                                      <block type="arithmetic" id="bsearch_prog_21">
+                                        <field name="OP">÷</field>
+                                        <value name="A">
+                                          <block type="arithmetic" id="bsearch_prog_22">
+                                            <field name="OP">+</field>
+                                            <value name="A">
+                                              <block type="variable_access" id="bsearch_prog_23">
+                                                <field name="VAR">low</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variable_access" id="bsearch_prog_24">
+                                                <field name="VAR">high</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="number_literal" id="bsearch_prog_25">
+                                            <field name="NUM">2</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="if_else_statement" id="bsearch_prog_26">
+                                        <value name="CONDITION">
+                                          <block type="comparison" id="bsearch_prog_27">
+                                            <field name="OP">===</field>
+                                            <value name="A">
+                                              <block type="array_access_1d" id="bsearch_prog_28">
+                                                <field name="ARRAY">haystack</field>
+                                                <value name="INDEX">
+                                                  <block type="variable_access" id="bsearch_prog_29">
+                                                    <field name="VAR">mid</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variable_access" id="bsearch_prog_30">
+                                                <field name="VAR">needle</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="assignment" id="bsearch_prog_31">
+                                            <field name="VAR">found_index</field>
+                                            <value name="VALUE">
+                                              <block type="variable_access" id="bsearch_prog_32">
+                                                <field name="VAR">mid</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="assignment" id="bsearch_prog_33">
+                                                <field name="VAR">searching</field>
+                                                <value name="VALUE">
+                                                  <block type="number_literal" id="bsearch_prog_34">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="if_else_statement" id="bsearch_prog_35">
+                                            <value name="CONDITION">
+                                              <block type="comparison" id="bsearch_prog_36">
+                                                <field name="OP">&lt;</field>
+                                                <value name="A">
+                                                  <block type="array_access_1d" id="bsearch_prog_37">
+                                                    <field name="ARRAY">haystack</field>
+                                                    <value name="INDEX">
+                                                      <block type="variable_access" id="bsearch_prog_38">
+                                                        <field name="VAR">mid</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variable_access" id="bsearch_prog_39">
+                                                    <field name="VAR">needle</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="assignment" id="bsearch_prog_40">
+                                                <field name="VAR">low</field>
+                                                <value name="VALUE">
+                                                  <block type="arithmetic" id="bsearch_prog_41">
+                                                    <field name="OP">+</field>
+                                                    <value name="A">
+                                                      <block type="variable_access" id="bsearch_prog_42">
+                                                        <field name="VAR">mid</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="number_literal" id="bsearch_prog_43">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <statement name="ELSE">
+                                              <block type="assignment" id="bsearch_prog_44">
+                                                <field name="VAR">high</field>
+                                                <value name="VALUE">
+                                                  <block type="arithmetic" id="bsearch_prog_45">
+                                                    <field name="OP">-</field>
+                                                    <value name="A">
+                                                      <block type="variable_access" id="bsearch_prog_46">
+                                                        <field name="VAR">mid</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="number_literal" id="bsearch_prog_47">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="simple_display" id="bsearch_prog_48">
+                                    <field name="NEWLINE">TRUE</field>
+                                    <value name="VALUE">
+                                      <block type="variable_access" id="bsearch_prog_49">
+                                        <field name="VAR">found_index</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
