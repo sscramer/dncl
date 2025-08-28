@@ -1,0 +1,106 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="array_assignment_full" id="srev_prog_1">
+    <field name="ARRAY">s_arr</field>
+    <field name="ELEMENTS">h,e,l,l,o</field>
+    <next>
+      <block type="array_assignment_full" id="srev_prog_2">
+        <field name="ARRAY">reversed_s_arr</field>
+        <field name="ELEMENTS">0,0,0,0,0</field>
+        <next>
+          <block type="assignment" id="srev_prog_3">
+            <field name="VAR">n</field>
+            <value name="VALUE">
+              <block type="array_length" id="srev_prog_len">
+                <value name="ARRAY">
+                    <block type="variable_access">
+                        <field name="VAR">s_arr</field>
+                    </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="for_loop" id="srev_prog_5">
+                <field name="VAR">i</field>
+                <value name="FROM">
+                  <block type="number_literal" id="srev_prog_6">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <value name="TO">
+                  <block type="arithmetic" id="srev_prog_7">
+                    <field name="OP">-</field>
+                    <value name="A">
+                      <block type="variable_access" id="srev_prog_8">
+                        <field name="VAR">n</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="number_literal" id="srev_prog_9">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <value name="STEP">
+                  <block type="number_literal" id="srev_prog_10">
+                    <field name="NUM">1</field>
+                  </block>
+                </value>
+                <statement name="DO">
+                  <block type="array_assignment_1d" id="srev_prog_11">
+                    <field name="ARRAY">reversed_s_arr</field>
+                    <value name="INDEX">
+                      <block type="variable_access" id="srev_prog_12">
+                        <field name="VAR">i</field>
+                      </block>
+                    </value>
+                    <value name="VALUE">
+                      <block type="array_access_1d" id="srev_prog_13">
+                        <field name="ARRAY">s_arr</field>
+                        <value name="INDEX">
+                          <block type="arithmetic" id="srev_prog_14">
+                            <field name="OP">-</field>
+                            <value name="A">
+                              <block type="arithmetic" id="srev_prog_15">
+                                <field name="OP">-</field>
+                                <value name="A">
+                                  <block type="variable_access" id="srev_prog_16">
+                                    <field name="VAR">n</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="number_literal" id="srev_prog_17">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variable_access" id="srev_prog_18">
+                                <field name="VAR">i</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="simple_display" id="srev_prog_19">
+                    <field name="NEWLINE">TRUE</field>
+                    <value name="VALUE">
+                      <block type="variable_access" id="srev_prog_20">
+                        <field name="VAR">reversed_s_arr</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

@@ -1,0 +1,70 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="assignment" id="fact_prog_1">
+    <field name="VAR">n</field>
+    <value name="VALUE">
+      <block type="number_literal" id="fact_prog_2">
+        <field name="NUM">10</field>
+      </block>
+    </value>
+    <next>
+      <block type="assignment" id="fact_prog_3">
+        <field name="VAR">result</field>
+        <value name="VALUE">
+          <block type="number_literal" id="fact_prog_4">
+            <field name="NUM">1</field>
+          </block>
+        </value>
+        <next>
+          <block type="for_loop" id="fact_prog_5">
+            <field name="VAR">i</field>
+            <value name="FROM">
+              <block type="number_literal" id="fact_prog_6">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+            <value name="TO">
+              <block type="variable_access" id="fact_prog_7">
+                <field name="VAR">n</field>
+              </block>
+            </value>
+            <value name="STEP">
+              <block type="number_literal" id="fact_prog_8">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+            <statement name="DO">
+              <block type="assignment" id="fact_prog_9">
+                <field name="VAR">result</field>
+                <value name="VALUE">
+                  <block type="arithmetic" id="fact_prog_10">
+                    <field name="OP">*</field>
+                    <value name="A">
+                      <block type="variable_access" id="fact_prog_11">
+                        <field name="VAR">result</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variable_access" id="fact_prog_12">
+                        <field name="VAR">i</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="simple_display" id="fact_prog_13">
+                <field name="NEWLINE">TRUE</field>
+                <value name="VALUE">
+                  <block type="variable_access" id="fact_prog_14">
+                    <field name="VAR">result</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

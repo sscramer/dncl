@@ -1,0 +1,173 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="array_assignment_full" id="lsearch_prog_1">
+    <field name="ARRAY">haystack</field>
+    <field name="ELEMENTS">87,45,72,100,25</field>
+    <next>
+      <block type="assignment" id="lsearch_prog_2">
+        <field name="VAR">needle</field>
+        <value name="VALUE">
+          <block type="number_literal" id="lsearch_prog_3">
+            <field name="NUM">72</field>
+          </block>
+        </value>
+        <next>
+          <block type="assignment" id="lsearch_prog_n">
+            <field name="VAR">n</field>
+            <value name="VALUE">
+                <block type="array_length" id="lsearch_prog_len">
+                    <value name="ARRAY">
+                        <block type="variable_access">
+                            <field name="VAR">haystack</field>
+                        </block>
+                    </value>
+                </block>
+            </value>
+            <next>
+              <block type="assignment" id="lsearch_prog_4">
+                <field name="VAR">found_index</field>
+                <value name="VALUE">
+                  <block type="number_literal" id="lsearch_prog_5">
+                    <field name="NUM">-1</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="assignment" id="lsearch_prog_6">
+                    <field name="VAR">i</field>
+                    <value name="VALUE">
+                      <block type="number_literal" id="lsearch_prog_7">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="assignment" id="lsearch_prog_8">
+                        <field name="VAR">searching</field>
+                        <value name="VALUE">
+                          <block type="number_literal" id="lsearch_prog_9">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="while_loop" id="lsearch_prog_10">
+                            <value name="CONDITION">
+                              <block type="logic_operation_jp" id="lsearch_prog_11">
+                                <field name="OP">&amp;&amp;</field>
+                                <value name="A">
+                                  <block type="comparison" id="lsearch_prog_12">
+                                    <field name="OP">&lt;</field>
+                                    <value name="A">
+                                      <block type="variable_access" id="lsearch_prog_13">
+                                        <field name="VAR">i</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variable_access" id="lsearch_prog_14a">
+                                        <field name="VAR">n</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="comparison" id="lsearch_prog_15">
+                                    <field name="OP">===</field>
+                                    <value name="A">
+                                      <block type="variable_access" id="lsearch_prog_16">
+                                        <field name="VAR">searching</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="number_literal" id="lsearch_prog_17">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO">
+                              <block type="if_statement" id="lsearch_prog_18">
+                                <value name="CONDITION">
+                                  <block type="comparison" id="lsearch_prog_19">
+                                    <field name="OP">===</field>
+                                    <value name="A">
+                                      <block type="array_access_1d" id="lsearch_prog_20">
+                                        <field name="ARRAY">haystack</field>
+                                        <value name="INDEX">
+                                          <block type="variable_access" id="lsearch_prog_21">
+                                            <field name="VAR">i</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variable_access" id="lsearch_prog_22">
+                                        <field name="VAR">needle</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO">
+                                  <block type="assignment" id="lsearch_prog_23">
+                                    <field name="VAR">found_index</field>
+                                    <value name="VALUE">
+                                      <block type="variable_access" id="lsearch_prog_24">
+                                        <field name="VAR">i</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="assignment" id="lsearch_prog_25">
+                                        <field name="VAR">searching</field>
+                                        <value name="VALUE">
+                                          <block type="number_literal" id="lsearch_prog_26">
+                                            <field name="NUM">0</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="assignment" id="lsearch_prog_27">
+                                    <field name="VAR">i</field>
+                                    <value name="VALUE">
+                                      <block type="arithmetic" id="lsearch_prog_28">
+                                        <field name="OP">+</field>
+                                        <value name="A">
+                                          <block type="variable_access" id="lsearch_prog_29">
+                                            <field name="VAR">i</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="number_literal" id="lsearch_prog_30">
+                                            <field name="NUM">1</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="simple_display" id="lsearch_prog_31">
+                                <field name="NEWLINE">TRUE</field>
+                                <value name="VALUE">
+                                  <block type="variable_access" id="lsearch_prog_32">
+                                    <field name="VAR">found_index</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>
