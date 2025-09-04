@@ -424,6 +424,9 @@
         <button id="exportButton" title="ファイルにエクスポート"><svg viewBox="0 0 24 24">
                 <path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
             </svg></button>
+        <button id="copyXmlButton" title="XMLをクリップボードにコピー"><svg viewBox="0 0 24 24">
+                <path fill="currentColor" d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" />
+            </svg></button>
         <button id="importButton" title="ファイルからインポート"><svg viewBox="0 0 24 24">
                 <path fill="currentColor" d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
             </svg></button>
@@ -2100,10 +2103,36 @@
             //======================================================================
             // インポート/エクスポート機能
             //======================================================================
-            function exportBlocks() {
+            async function exportBlocks() {
                 try {
                     const xml = Blockly.Xml.workspaceToDom(workspace);
                     const xmlText = Blockly.Xml.domToPrettyText(xml);
+
+                    // Modern "Save As" API
+                    if (window.showSaveFilePicker) {
+                        try {
+                            const handle = await window.showSaveFilePicker({
+                                suggestedName: 'dncl_program.xml',
+                                types: [{
+                                    description: 'XML Files',
+                                    accept: { 'text/xml': ['.xml'] },
+                                }],
+                            });
+                            const writable = await handle.createWritable();
+                            await writable.write(xmlText);
+                            await writable.close();
+                            return;
+                        } catch (err) {
+                            // Handle user cancellation, which throws a "DOMException"
+                            if (err.name !== 'AbortError') {
+                                console.error(err);
+                                alert("エクスポート失敗: " + err.message);
+                            }
+                            return; // Stop if user cancels
+                        }
+                    }
+
+                    // Fallback for older browsers
                     const a = document.createElement('a');
                     a.href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(xmlText);
                     a.download = 'dncl_program.xml';
@@ -2116,6 +2145,34 @@
 
             function importBlocks() {
                 document.getElementById('importFile').click();
+            }
+
+            async function copyXmlToClipboard() {
+                const button = document.getElementById('copyXmlButton');
+                try {
+                    const xml = Blockly.Xml.workspaceToDom(workspace);
+                    const xmlText = Blockly.Xml.domToPrettyText(xml);
+
+                    if (!navigator.clipboard) {
+                        alert("クリップボードAPIは、このブラウザではサポートされていません。");
+                        return;
+                    }
+
+                    await navigator.clipboard.writeText(xmlText);
+
+                    // Visual feedback
+                    const originalContent = button.innerHTML;
+                    button.innerHTML = 'コピーしました!';
+                    button.style.color = 'var(--status-success-color)';
+                    setTimeout(() => {
+                        button.innerHTML = originalContent;
+                        button.style.color = '';
+                    }, 2000);
+
+                } catch (err) {
+                    console.error('XMLのコピーに失敗:', err);
+                    alert('コピーに失敗しました: ' + err.message);
+                }
             }
 
             function loadBlocksFromFile(file) {
@@ -2151,6 +2208,7 @@
             document.getElementById('stepBackButton').addEventListener('click', stepBack);
             document.getElementById('resetButton').addEventListener('click', resetExecution);
             document.getElementById('exportButton').addEventListener('click', exportBlocks);
+            document.getElementById('copyXmlButton').addEventListener('click', copyXmlToClipboard);
             document.getElementById('importButton').addEventListener('click', importBlocks);
             document.getElementById('importFile').addEventListener('change', (e) => loadBlocksFromFile(e.target.files[0]));
             document.getElementById('oneBasedCheckbox').addEventListener('change', (e) => { oneBasedMode = e.target.checked; });
