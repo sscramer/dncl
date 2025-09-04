@@ -1,0 +1,36 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="simple_display" id="display_prompt" x="100" y="50">
+    <field name="NEWLINE">TRUE</field>
+    <value name="VALUE">
+      <block type="string_literal">
+        <field name="TEXT">What is your name?</field>
+      </block>
+    </value>
+    <next>
+      <block type="assignment" id="assign_name">
+        <field name="VAR">name</field>
+        <value name="VALUE">
+          <block type="external_input">
+            <field name="TYPE">STRING</field>
+          </block>
+        </value>
+        <next>
+          <block type="display" id="display_greeting">
+            <mutation items="2"></mutation>
+            <field name="NEWLINE">TRUE</field>
+            <value name="ADD0">
+              <block type="string_literal">
+                <field name="TEXT">Hello, </field>
+              </block>
+            </value>
+            <value name="ADD1">
+              <block type="variable_access">
+                <field name="VAR">name</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </next>
+  </block>
+</xml>

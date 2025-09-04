@@ -9,7 +9,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL Simulator (v2.3)</title>
+    <title>DNCL Simulator (v2.3.1)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
@@ -610,9 +610,11 @@
             // グローバル変数と定数
             //======================================================================
             let myInterpreter = null;       // JS-Interpreterのインスタンス
+            let runnerTimeoutId = null;     // To hold the timeout ID for the runner
             let workspace = null;           // Blocklyのワークスペースインスタンス
             let oneBasedMode = false;       // 配列のインデックスを1から始めるモードか
             let ignoreBreakpoints = false;  // 一括実行時にブレークポイントを無視するか
+            let isPausedForAsync = false;   // 非同期処理による一時停止中かを示すフラグ
             let previousDebugVars = {};     // 前回の変数の状態を保持（変更検出用）
             let currentHighlightedBlockId = null; // 現在ハイライトされているブロックID
             const EXECUTION_TIMEOUT_STEPS = 2000000; // 無限ループ防止用の最大実行ステップ数
@@ -1103,15 +1105,6 @@
              * @param {string} msg プロンプトに表示するメッセージ
              * @returns {string} 入力された値。キャンセルまたは空の場合は "0" を返す。
              */
-            function myPrompt(msg) {
-                try {
-                    const result = window.prompt(msg);
-                    return result === null || result.trim() === '' ? "0" : result;
-                } catch (e) {
-                    console.error("Input error:", e);
-                    return "0"; // エラー時も "0" を返す
-                }
-            }
 
             /**
              * インタプリタ内の変数の値を `window.debugVars` に記録する
@@ -1683,6 +1676,8 @@
                 // JS-Interpreter内で使えるネイティブ関数を作成するヘルパー
 
                 function createNative(func) { return interpreter.createNativeFunction(func); }
+                function createAsync(func) { return interpreter.createAsyncFunction(func); }
+
 
                 // displayOutput, myPromptなどをインタプリタのグローバルのグローバルスコープに追加
                 interpreter.setProperty(globalObject, 'displayOutput', createNative((text, isError, addNewline) => displayOutput(text !== null && text !== undefined ? text.toString() : "", isError, addNewline)));
@@ -1690,7 +1685,20 @@
                 interpreter.setProperty(globalObject, 'safeArrayAccess', createNative((arr, idx) => safeArrayAccess(arr, idx)));
                 interpreter.setProperty(globalObject, 'safeArrayAccess2d', createNative((arr, i, j) => safeArrayAccess2d(arr, i, j)));
                 interpreter.setProperty(globalObject, 'nativeLog', createNative((varName, value) => window.nativeLog(varName, interpreter.pseudoToNative(value))));
-                interpreter.setProperty(globalObject, 'myPrompt', createNative(msg => myPrompt(interpreter.pseudoToNative(msg))));
+
+                const myPromptWrapper = (text, callback) => {
+                    isPausedForAsync = true;
+                    // Add a short delay to allow the browser to render the output before showing the prompt.
+                    setTimeout(() => {
+                        const result = window.prompt(text);
+                        // The callback will resume the interpreter.
+                        callback(result);
+                        // After the prompt is closed, resume execution.
+                        continueRunAll();
+                    }, 100);
+                };
+                interpreter.setProperty(globalObject, 'myPrompt', createAsync((text, cb) => myPromptWrapper(text, cb)));
+
 
                 // ブレークポイント処理用の関数
                 interpreter.setProperty(globalObject, 'checkBreakpoint', createNative((number) => {
@@ -1946,53 +1954,67 @@
             /**
              * プログラムを最後まで一括実行する
              */
+            function continueRunAll() {
+                if (!myInterpreter) { return; }
+                isPausedForAsync = false; // Resume execution
+                runner();
+            }
+
+            function runner() {
+                if (!myInterpreter) { return; }
+
+                const BATCH_SIZE = 2000;
+                let stepCount = 0;
+
+                try {
+                    for (let i = 0; i < BATCH_SIZE; i++) {
+                        if (executionHistory.interpreterStepCounter++ > EXECUTION_TIMEOUT_STEPS) {
+                            if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
+                            displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
+                            setRunStatus("タイムアウト", "status-error");
+                            myInterpreter = null;
+                            return;
+                        }
+
+                        if (!myInterpreter.step()) {
+                            if (isPausedForAsync) {
+                                // Paused for async operation, the callback will restart the runner.
+                                return;
+                            }
+                            // Program finished successfully.
+                            if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
+                            updateStateDisplayVisual();
+                            setRunStatus("プログラム終了", "status-success");
+                            myInterpreter = null;
+                            return;
+                        }
+                    }
+                    // Yield to the event loop and continue execution.
+                    runnerTimeoutId = setTimeout(runner, 0);
+                } catch (e) {
+                    displayOutput("実行エラー: " + e.message, true);
+                    updateStateDisplayVisual();
+                    setRunStatus("エラー発生", "status-error");
+                    myInterpreter = null;
+                }
+            }
+
             function runAll() {
                 // 実行前に状態をリセット
+                if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
                 myInterpreter = null;
                 document.getElementById('outputDiv').innerHTML = "";
                 document.getElementById('stateDiv').innerHTML = "";
                 window.debugVars = {};
                 previousDebugVars = {};
-                // 実行履歴はクリアしない
+                isPausedForAsync = false;
+                executionHistory.interpreterStepCounter = 0;
 
                 if (!prepareInterpreter()) return;
 
-                ignoreBreakpoints = true; // ブレークポイントを無効にする
+                ignoreBreakpoints = true;
                 setRunStatus("一括実行中...");
-
-                let stepCount = 0;
-                const BATCH_SIZE = 2000; // UIが固まらないよう、一度に実行するステップ数
-
-                const runner = () => {
-                    try {
-                        for (let i = 0; i < BATCH_SIZE; i++) {
-                            // タイムアウトチェック
-                            if (stepCount++ > EXECUTION_TIMEOUT_STEPS) {
-                                displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
-                                setRunStatus("タイムアウト", "status-error");
-                                myInterpreter = null;
-                                return;
-                            }
-
-                            executionHistory.interpreterStepCounter++;
-                            if (!myInterpreter || !myInterpreter.step()) {
-                                // プログラムが終了した
-                                updateStateDisplayVisual();
-                                setRunStatus("プログラム終了", "status-success");
-                                myInterpreter = null;
-                                return;
-                            }
-                        }
-                        // BATCH_SIZEステップ実行したら、次のバッチをスケジュール
-                        setTimeout(runner, 0);
-                    } catch (e) {
-                        displayOutput("実行エラー: " + e.message, true);
-                        updateStateDisplayVisual();
-                        setRunStatus("エラー発生", "status-error");
-                        myInterpreter = null;
-                    }
-                };
-                runner(); // 実行開始
+                runner();
             }
 
             //======================================================================
