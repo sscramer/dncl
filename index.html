@@ -1925,20 +1925,30 @@
                     return false;
                 }
 
-                // If the program body is already empty, we are done.
-                if (interpreter.stateStack[0].node.body.length === 0) {
+                // Pre-emptively check for completion based on observed behavior.
+                if (interpreter.stateStack.length === 1 && interpreter.stateStack[0].node.body.length === 0) {
                     return false;
                 }
 
+                // Phase 1: Unwind from any nested calls (like after a breakpoint).
+                while (interpreter.stateStack.length > 1) {
+                    if (!interpreter.step()) { return false; }
+                    if (interpreter.paused_) { return true; }
+                }
+
+                // If program finished during unwind.
+                if (interpreter.stateStack.length === 0) {
+                    return false;
+                }
+
+                // Phase 2: Now that we are at the top level, execute one full statement.
                 const startingStackDepth = interpreter.stateStack.length;
                 do {
-                    if (!interpreter.step()) {
-                        return false;
-                    }
+                    if (!interpreter.step()) { return false; }
+                    if (interpreter.paused_) { return true; }
                 } while (interpreter.stateStack.length > startingStackDepth);
 
-                // After the statement, if the body is now empty, we are done.
-                return interpreter.stateStack[0].node.body.length > 0;
+                return interpreter.stateStack.length > 0;
             }
 
             function stepCode() {
@@ -1960,7 +1970,13 @@
                     saveExecutionSnapshot();
                     updateStateDisplayVisual();
 
-                    if (!hasMore) {
+                    if (myInterpreter && myInterpreter.paused_) {
+                        const bpNum = myInterpreter.breakpointNumber;
+                        myInterpreter.paused_ = false; // Reset for the next step
+                        myInterpreter.breakpointNumber = null;
+                        const statusText = (bpNum !== null && bpNum !== undefined) ? `ブレークポイント ${bpNum}` : 'ブレークポイント';
+                        setRunStatus(statusText);
+                    } else if (!hasMore) {
                         setRunStatus("プログラム終了", "status-success");
                         document.getElementById('executionFinishedModal').style.display = 'flex';
                         myInterpreter = null;
