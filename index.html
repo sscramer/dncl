@@ -9,7 +9,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL Simulator (v2.4)</title>
+    <title>DNCL Simulator (v2.3.1)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
@@ -620,7 +620,7 @@
             let isPausedForAsync = false;   // 非同期処理による一時停止中かを示すフラグ
             let previousDebugVars = {};     // 前回の変数の状態を保持（変更検出用）
             let currentHighlightedBlockId = null; // 現在ハイライトされているブロックID
-            const EXECUTION_TIMEOUT_STEPS = 200000000; // 無限ループ防止用の最大実行ステップ数
+            const EXECUTION_TIMEOUT_STEPS = 2000000; // 無限ループ防止用の最大実行ステップ数
 
             // 実行履歴管理用のグローバル変数            
             const executionHistory = {
@@ -1316,7 +1316,7 @@
             Blockly.JavaScript['if_else_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO0')}} else {\n${Blockly.JavaScript.statementToCode(block, 'ELSE')}}\n`;
             Blockly.JavaScript['while_loop'] = (block) => `while (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
             Blockly.JavaScript['do_while_loop'] = (block) => `do {\n${Blockly.JavaScript.statementToCode(block, 'DO')}} while (!(${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}));\n`;
-            Blockly.JavaScript['for_loop'] = function (block) { const varName = block.getFieldValue('VAR'); const fromVal = Blockly.JavaScript.valueToCode(block, 'FROM', ORDER_ASSIGNMENT) || '0'; const toVal = Blockly.JavaScript.valueToCode(block, 'TO', ORDER_RELATIONAL) || '0'; const stepVal = Blockly.JavaScript.valueToCode(block, 'STEP', ORDER_ASSIGNMENT) || '1'; if (Number(stepVal) === 0) { throw new Error("「くりかえし」ブロックの「ずつ増やす」の値に0は指定できません。"); } const branch = Blockly.JavaScript.statementToCode(block, 'DO'); let operator = '<='; const stepBlock = block.getInputTargetBlock('STEP'); if (stepBlock && stepBlock.type === 'number_literal') { const stepNum = Number(stepBlock.getFieldValue('NUM')); if (stepNum < 0) { operator = '>='; } } else if (stepVal.trim().startsWith('-')) { operator = '>='; } const loopCode = `for (${varName} = ${fromVal}; ${varName} ${operator} ${toVal}; ${varName} += ${stepVal}) {\n  nativeLog('${varName}', ${varName});\n${branch}}\n`; const finalAssignment = `${varName} = (${toVal}) + (${stepVal});\n`; const finalLog = `nativeLog('${varName}', ${varName});\n`; return loopCode + finalAssignment + finalLog; };
+            Blockly.JavaScript['for_loop'] = function (block) { const varName = block.getFieldValue('VAR'); const fromVal = Blockly.JavaScript.valueToCode(block, 'FROM', ORDER_ASSIGNMENT) || '0'; const toVal = Blockly.JavaScript.valueToCode(block, 'TO', ORDER_RELATIONAL) || '0'; const stepVal = Blockly.JavaScript.valueToCode(block, 'STEP', ORDER_ASSIGNMENT) || '1'; if (Number(stepVal) === 0) { throw new Error("「くりかえし」ブロックの「ずつ増やす」の値に0は指定できません。"); } const branch = Blockly.JavaScript.statementToCode(block, 'DO'); let operator = '<='; const stepBlock = block.getInputTargetBlock('STEP'); if (stepBlock && stepBlock.type === 'number_literal') { const stepNum = Number(stepBlock.getFieldValue('NUM')); if (stepNum < 0) { operator = '>='; } } else if (stepVal.trim().startsWith('-')) { operator = '>='; } const loopCode = `for (${varName} = ${fromVal}; ${varName} ${operator} ${toVal}; ${varName} += ${stepVal}) {\n  nativeLog('${varName}', ${varName});\n${branch}}\n`; const finalLog = `nativeLog('${varName}', ${varName});\n`; return loopCode + finalLog; };
             Blockly.JavaScript['inc_dec'] = (block) => { const varName = block.getFieldValue('VAR'); const op = block.getFieldValue('OP') === '+1' ? '++' : '--'; return `${varName}${op};\nnativeLog('${varName}', ${varName});\n`; };
             Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
             Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
@@ -1716,13 +1716,11 @@
                 interpreter.functionCall = function (func, funcThis, args) {
                     let funcName = (func.node && func.node.id) ? func.node.id.name : "匿名関数";
                     const argVals = args ? args.map(a => interpreter.pseudoToNative(a)) : [];
-                    // [FIX] パフォーマンス低下を防ぐため、大量に呼び出される可能性のあるログ出力を無効化
-                    // displayOutput(`<div class='function-call'>関数呼び出し: ${funcName}(${argVals.join(", ")})</div>`, false, false);
+                    displayOutput(`<div class='function-call'>関数呼び出し: ${funcName}(${argVals.join(", ")})</div>`, false, false);
                     const result = originalFuncCall.call(this, func, funcThis, args);
                     if (result !== undefined && func.node.type !== 'FunctionDeclaration') {
                         const returnVal = interpreter.pseudoToNative(result);
-                        // [FIX] パフォーマンス低下を防ぐため、大量に呼び出される可能性のあるログ出力を無効化
-                        // displayOutput(`<div class='function-return'>関数 ${funcName} の戻り値: ${returnVal}</div>`, false, false);
+                        displayOutput(`<div class='function-return'>関数 ${funcName} の戻り値: ${returnVal}</div>`, false, false);
                     }
                     return result;
                 };
@@ -1814,7 +1812,6 @@
              */
             function resetExecution() {
                 if (myInterpreter) myInterpreter = null;
-                window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
                 document.getElementById('outputDiv').innerHTML = "";
                 document.getElementById('stateDiv').innerHTML = "";
                 window.debugVars = {};
@@ -2009,7 +2006,6 @@
                 // 実行前に状態をリセット
                 if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
                 myInterpreter = null;
-                window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
                 document.getElementById('outputDiv').innerHTML = "";
                 document.getElementById('stateDiv').innerHTML = "";
                 window.debugVars = {};
