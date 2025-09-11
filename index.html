@@ -733,6 +733,9 @@
             function captureExecutionSnapshot() {
                 if (!myInterpreter) return;
 
+                // [FIX] ステップバック時に出力が正しく復元されるよう、スナップショット作成前に出力バッファを強制的にフラッシュする
+                flushOutput();
+
                 const snapshot = {
                     state: deepClone(myInterpreter.stateStack),
                     stepNumber: executionHistory.stepCounter,
@@ -1849,21 +1852,17 @@
              * @returns {boolean} 準備に成功したか
              */
             function prepareInterpreter() {
-                // 既にインタープリターが存在する場合（復元された状態など）はそのまま使用
                 if (myInterpreter) return true;
 
                 try {
-                    // ワークスペース上の全ての変数を取得し、`var`宣言を生成
                     const allVariables = workspace.getAllVariables();
                     const varNames = allVariables.map(v => v.name);
                     const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : '';
-
-                    // ブロックからJavaScriptコードを生成（ここでエラーがスローされる可能性がある）
                     const blockCode = Blockly.JavaScript.workspaceToCode(workspace);
                     const finalCode = declarationString + blockCode;
 
                     myInterpreter = new Interpreter(finalCode, initInterpreter);
-                    window.myInterpreter = myInterpreter; // デバッグ用にグローバルに公開
+                    window.myInterpreter = myInterpreter;
 
                     return true;
                 } catch (e) {
@@ -1916,16 +1915,37 @@
             }/**
              * 次のブレークポイントまで、またはプログラム終了まで実行する（ステップ実行）
              */
+            /**
+             * インタプリタで1つの文を実行する
+             * @param {Interpreter} interpreter
+             * @returns {boolean} プログラムがまだ続く場合はtrue
+             */
+            function myStepStatement(interpreter) {
+                if (!interpreter || !interpreter.stateStack.length) {
+                    return false;
+                }
+
+                // If the program body is already empty, we are done.
+                if (interpreter.stateStack[0].node.body.length === 0) {
+                    return false;
+                }
+
+                const startingStackDepth = interpreter.stateStack.length;
+                do {
+                    if (!interpreter.step()) {
+                        return false;
+                    }
+                } while (interpreter.stateStack.length > startingStackDepth);
+
+                // After the statement, if the body is now empty, we are done.
+                return interpreter.stateStack[0].node.body.length > 0;
+            }
+
             function stepCode() {
-                // インタープリターが既に存在する場合（復元された状態）はそのまま使用
-                // 存在しない場合は新しく準備
                 if (!myInterpreter && !prepareInterpreter()) {
                     return;
                 }
 
-                ignoreBreakpoints = false; // ブレークポイントを有効にする
-
-                // 初回実行時は開始時点のスナップショットを保存
                 if (executionHistory.snapshots.length === 0) {
                     executionHistory.stepCounter = 0;
                     saveExecutionSnapshot();
@@ -1933,50 +1953,24 @@
 
                 setRunStatus("ステップ実行中...");
 
-                let stepCount = 0;
-                let finished = false;
-                while (true) {
-                    // タイムアウトチェック
-                    if (stepCount++ > EXECUTION_TIMEOUT_STEPS) {
-                        displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
-                        setRunStatus("タイムアウト", "status-error");
+                try {
+                    const hasMore = myStepStatement(myInterpreter);
+
+                    executionHistory.stepCounter++;
+                    saveExecutionSnapshot();
+                    updateStateDisplayVisual();
+
+                    if (!hasMore) {
+                        setRunStatus("プログラム終了", "status-success");
+                        document.getElementById('executionFinishedModal').style.display = 'flex';
                         myInterpreter = null;
-                        return;
+                    } else {
+                        setRunStatus(`ステップ ${executionHistory.stepCounter}`);
                     }
-                    try {
-                        executionHistory.interpreterStepCounter++;
-                        if (!myInterpreter.step()) {
-                            finished = true; // プログラムが終了した
-                            break;
-                        }
-                        if (myInterpreter.paused_) {
-                            break; // ブレークポイントで一時停止した
-                        }
-                    } catch (e) {
-                        displayOutput("実行エラー: " + e.message, true);
-                        setRunStatus("エラー発生", "status-error");
-                        myInterpreter = null;
-                        return;
-                    }
-                }
-
-                // ステップカウンターを増加してスナップショットを保存
-                executionHistory.stepCounter++;
-                saveExecutionSnapshot();
-
-                updateStateDisplayVisual(); // 状態を更新
-
-                if (finished) {
-                    setRunStatus("プログラム終了", "status-success");
-                    document.getElementById('executionFinishedModal').style.display = 'flex';
-                } else if (myInterpreter && myInterpreter.paused_) {
-                    const bpNum = myInterpreter.breakpointNumber;
-                    myInterpreter.paused_ = false; // 次のステップ実行のためにpausedフラグをリセット
-                    myInterpreter.breakpointNumber = null;
-                    const statusText = (bpNum !== null && bpNum !== undefined) ? `ブレークポイント ${bpNum}` : 'ブレークポイント';
-                    setRunStatus(statusText);
-                } else {
-                    setRunStatus(`ステップ ${executionHistory.stepCounter}`);
+                } catch (e) {
+                    displayOutput("実行エラー: " + e.message, true);
+                    setRunStatus("エラー発生", "status-error");
+                    myInterpreter = null;
                 }
             }
 
