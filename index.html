@@ -634,6 +634,10 @@
             // インタプリタ内の変数を監視するためのグローバルオブジェクト
             window.debugVars = {};
 
+            // [FIX] パフォーマンス改善のため、出力バッファリングを追加
+            let outputBuffer = [];
+            let isFlushScheduled = false;
+
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
             const ORDER_MEMBER = 1;
@@ -1119,35 +1123,54 @@
             };
 
             /**
-             * 出力パネルにテキストを表示する
-             * @param {string} text 表示するテキスト
-             * @param {boolean} isError エラーメッセージとして表示するか
-             * @param {boolean} addNewline 改行を追加するか
+             * [FIX] パフォーマンス改善のため、出力をバッファリングし、requestAnimationFrameでまとめてDOMに書き込む
              */
-            function displayOutput(text, isError = false, addNewline = true) {
-                const outputDiv = document.getElementById('outputDiv');
-                if (isError) {
-                    const line = document.createElement('div');
-                    line.className = 'error-output';
-                    line.textContent = text;
-                    outputDiv.appendChild(line);
-                } else {
-                    // `text`が`div`要素を含むHTML文字列の場合、そのまま追加
-                    if (typeof text === 'string' && text.trim().startsWith('<div')) {
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = text;
-                        while (tempDiv.firstChild) {
-                            outputDiv.appendChild(tempDiv.firstChild);
-                        }
-                    } else {
-                        outputDiv.appendChild(document.createTextNode(text));
-                    }
+            function flushOutput() {
+                if (outputBuffer.length === 0) {
+                    isFlushScheduled = false;
+                    return;
+                }
 
+                const outputDiv = document.getElementById('outputDiv');
+                const fragment = document.createDocumentFragment();
+
+                // バッファの内容を一度に処理
+                const htmlString = outputBuffer.join('');
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlString;
+
+                while (tempDiv.firstChild) {
+                    fragment.appendChild(tempDiv.firstChild);
+                }
+
+                outputDiv.appendChild(fragment);
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+
+                // バッファをクリアし、フラグをリセット
+                outputBuffer = [];
+                isFlushScheduled = false;
+            }
+
+            function displayOutput(text, isError = false, addNewline = true) {
+                let content = '';
+                if (isError) {
+                    content = `<div class="error-output">${text}</div>`;
+                } else {
+                     if (typeof text === 'string' && text.trim().startsWith('<div')) {
+                        content = text;
+                    } else {
+                        content = text.toString();
+                    }
                     if (addNewline) {
-                        outputDiv.appendChild(document.createElement('br'));
+                        content += '<br>';
                     }
                 }
-                outputDiv.scrollTop = outputDiv.scrollHeight; // 自動スクロール
+                outputBuffer.push(content);
+
+                if (!isFlushScheduled) {
+                    isFlushScheduled = true;
+                    requestAnimationFrame(flushOutput);
+                }
             }
 
             /**
@@ -1317,7 +1340,7 @@
             Blockly.JavaScript['while_loop'] = (block) => `while (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
             Blockly.JavaScript['do_while_loop'] = (block) => `do {\n${Blockly.JavaScript.statementToCode(block, 'DO')}} while (!(${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}));\n`;
             Blockly.JavaScript['for_loop'] = function (block) { const varName = block.getFieldValue('VAR'); const fromVal = Blockly.JavaScript.valueToCode(block, 'FROM', ORDER_ASSIGNMENT) || '0'; const toVal = Blockly.JavaScript.valueToCode(block, 'TO', ORDER_RELATIONAL) || '0'; const stepVal = Blockly.JavaScript.valueToCode(block, 'STEP', ORDER_ASSIGNMENT) || '1'; if (Number(stepVal) === 0) { throw new Error("「くりかえし」ブロックの「ずつ増やす」の値に0は指定できません。"); } const branch = Blockly.JavaScript.statementToCode(block, 'DO'); let operator = '<='; const stepBlock = block.getInputTargetBlock('STEP'); if (stepBlock && stepBlock.type === 'number_literal') { const stepNum = Number(stepBlock.getFieldValue('NUM')); if (stepNum < 0) { operator = '>='; } } else if (stepVal.trim().startsWith('-')) { operator = '>='; } const loopCode = `for (${varName} = ${fromVal}; ${varName} ${operator} ${toVal}; ${varName} += ${stepVal}) {\n  nativeLog('${varName}', ${varName});\n${branch}}\n`; const finalAssignment = `${varName} = (${toVal}) + (${stepVal});\n`; const finalLog = `nativeLog('${varName}', ${varName});\n`; return loopCode + finalAssignment + finalLog; };
-            Blockly.JavaScript['inc_dec'] = (block) => { const varName = block.getFieldValue('VAR'); const op = block.getFieldValue('OP') === '+1' ? '++' : '--'; return `${varName}${op};\nnativeLog('${varName}', ${varName});\n`; };
+            Blockly.JavaScript['inc_dec'] = (block) => { const varName = block.getFieldValue('VAR'); const op = block.getFieldValue('OP') === '+1' ? '+' : '-'; return `${varName} = (typeof ${varName} === 'undefined' ? 0 : ${varName}) ${op} 1;\nnativeLog('${varName}', ${varName});\n`; };
             Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
             Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
@@ -1737,7 +1760,7 @@
             function updateStateDisplayVisual() {
                 const stateDiv = document.getElementById('stateDiv');
                 stateDiv.innerHTML = "";
-                let currentCopy = JSON.parse(JSON.stringify(window.debugVars));
+                let currentCopy = deepClone(window.debugVars);
 
                 for (const key in window.debugVars) {
                     const container = document.createElement('div');
