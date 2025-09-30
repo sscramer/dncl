@@ -51,6 +51,13 @@
             touch-action: none;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            box-sizing: border-box;
+        }
+
+        body {
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         /* カスタムスクロールバー */
@@ -74,12 +81,13 @@
 
         /* ヘッダーセクション */
         #header {
-            height: var(--header-height);
+            height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
             background: var(--background-panel);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             padding: 0 16px;
+            padding-top: calc(env(safe-area-inset-top, 0px));
             box-sizing: border-box;
             gap: 8px;
             box-shadow: var(--shadow-sm);
@@ -213,7 +221,7 @@
         /* メインコンテナ */
         #mainContainer {
             display: flex;
-            height: calc(100% - var(--header-height));
+            height: calc(100% - var(--header-height) - env(safe-area-inset-top, 0px));
             box-sizing: border-box;
         }
 
@@ -238,6 +246,15 @@
             border-left: 1px solid var(--border-color);
         }
 
+        body.output-hidden #paneRight,
+        body.output-hidden #resizerV {
+            display: none;
+        }
+
+        body.output-hidden #paneLeft {
+            flex: 1 1 100%;
+        }
+
         /* ペインのリサイズ用ハンドル */
         .resizer-v {
             width: 10px;
@@ -248,6 +265,55 @@
             transition: background-color 0.2s;
             touch-action: none;
             position: relative;
+        }
+
+        #outputToggleButton {
+            position: fixed;
+            left: 50%;
+            bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: 1px solid var(--primary-color);
+            background: var(--primary-color);
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: var(--shadow-lg);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        #outputToggleButton svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        #outputToggleButton[aria-pressed="false"] {
+            background: var(--button-bg);
+            color: var(--text-color);
+            border-color: var(--button-border);
+        }
+
+        #outputToggleButton[aria-pressed="false"] svg {
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 600px) {
+            #outputToggleButton {
+                padding: 9px 14px;
+                font-size: 13px;
+                gap: 6px;
+            }
+
+            #outputToggleButton svg {
+                width: 16px;
+                height: 16px;
+            }
         }
 
         .resizer-v::after {
@@ -806,6 +872,13 @@
         </div>
     </div>
 
+    <button id="outputToggleButton" class="floating-toggle" type="button" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M3,5H5V19H3V5M7,5H9V19H7V5M11,5H13V19H11V5M15,5H17V19H15V5M19,5H21V19H19V5Z" />
+        </svg>
+        <span>出力エリア: 表示中</span>
+    </button>
+
     <!-- モーダルウィンドウ -->
     <!-- 生成コード表示モーダル -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
@@ -923,6 +996,7 @@
             const enableStepBackCheckbox = document.getElementById('enableStepBackCheckbox');
             const betaWarningModal = document.getElementById('betaWarningModal');
             const betaWarningModalCloseButton = document.getElementById('betaWarningModalCloseButton');
+            const outputToggleButton = document.getElementById('outputToggleButton');
 
             // β機能（ステップバック）有効化チェックボックスの処理
             enableStepBackCheckbox.addEventListener('change', () => {
@@ -968,6 +1042,44 @@
             let outputBuffer = [];
             let isFlushScheduled = false;
             let outputFlushRequestId = null;
+
+            //======================================================================
+            // 出力ペインの表示制御
+            //======================================================================
+            function updateOutputToggleLabel(isVisible) {
+                if (!outputToggleButton) return;
+                outputToggleButton.setAttribute('aria-pressed', String(isVisible));
+                const labelSpan = outputToggleButton.querySelector('span');
+                if (labelSpan) {
+                    labelSpan.textContent = isVisible ? '出力エリア: 表示中' : '出力エリア: 非表示';
+                }
+            }
+
+            function setOutputVisibility(shouldShow, { focusButton = false } = {}) {
+                document.body.classList.toggle('output-hidden', !shouldShow);
+                if (outputToggleButton) {
+                    updateOutputToggleLabel(shouldShow);
+
+                    if (focusButton) {
+                        outputToggleButton.focus({ preventScroll: true });
+                    }
+                }
+
+                if (workspace) {
+                    setTimeout(() => {
+                        workspace.resize();
+                    }, 0);
+                }
+            }
+
+            if (outputToggleButton) {
+                outputToggleButton.addEventListener('click', () => {
+                    const willShow = document.body.classList.contains('output-hidden');
+                    setOutputVisibility(willShow, { focusButton: true });
+                });
+            }
+
+            setOutputVisibility(true);
 
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
@@ -2390,6 +2502,7 @@
 
             function runAll() {
                 // 実行前に状態をリセット
+                setOutputVisibility(true);
                 if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
                 myInterpreter = null;
                 window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
@@ -2589,6 +2702,7 @@
                 zoom: { controls: true, wheel: true }
             });
             window.workspace = workspace; // Make workspace global for Playwright tests
+            setOutputVisibility(true);
             // --- ボタンのイベントリスナー ---
             document.getElementById('runButton').addEventListener('click', runAll);
             document.getElementById('stepButton').addEventListener('click', stepCode);
