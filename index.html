@@ -2,6 +2,7 @@
     Project Name: DNCL_Simulator
     Author: Shohei Yamazaki
     Contact: yamazaki-shohei（at）ed.pref.toyama.jp
+    Enhanced Version: Improved UI and Mobile Support
 -->
 
 <!DOCTYPE html>
@@ -9,7 +10,8 @@
 
 <head>
     <meta charset="utf-8">
-    <title>DNCL Simulator (v2.4)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DNCL Simulator (v2.5)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
@@ -17,17 +19,26 @@
     <style>
         /* CSS変数: アプリケーション全体のデザイン統一のため */
         :root {
-            --header-height: 50px;
-            --border-color: #ccc;
-            --background-light: #eee;
-            --background-panel: #fff;
-            --text-color: #333;
-            --button-bg: #f5f5f5;
-            --button-hover-bg: #e0e0e0;
-            --status-error-bg: #fbe9e7;
-            --status-error-color: #c62828;
-            --status-success-bg: #e8f5e9;
-            --status-success-color: #2e7d32;
+            --header-height: 56px;
+            --header-height-mobile: 48px;
+            --border-color: #d1d5db;
+            --background-light: #f3f4f6;
+            --background-panel: #ffffff;
+            --text-color: #1f2937;
+            --text-secondary: #6b7280;
+            --button-bg: #ffffff;
+            --button-hover-bg: #f9fafb;
+            --button-active-bg: #f3f4f6;
+            --button-border: #d1d5db;
+            --status-error-bg: #fef2f2;
+            --status-error-color: #dc2626;
+            --status-success-bg: #f0fdf4;
+            --status-success-color: #16a34a;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
         }
 
         html,
@@ -35,106 +46,152 @@
             height: 100%;
             margin: 0;
             overflow: hidden;
-            /* ウィンドウ全体のスクロールを禁止 */
-            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
             color: var(--text-color);
-            /* [FIX] タッチ操作による意図しない拡大などを防ぐ */
             touch-action: none;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         /* カスタムスクロールバー */
         ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
         }
 
         ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: var(--background-light);
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 4px;
+            background: #cbd5e1;
+            border-radius: 5px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #aaa;
+            background: #94a3b8;
         }
 
         /* ヘッダーセクション */
         #header {
             height: var(--header-height);
-            background: var(--background-light);
+            background: var(--background-panel);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            padding: 0 15px;
+            padding: 0 16px;
             box-sizing: border-box;
-            gap: 10px;
+            gap: 8px;
+            box-shadow: var(--shadow-sm);
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+
+        #header::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .header-section {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-divider {
+            width: 1px;
+            height: 24px;
+            background: var(--border-color);
+            margin: 0 4px;
         }
 
         #header button {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 5px;
-            padding: 6px 12px;
-            border-radius: 6px;
-            border: 1px solid #bbb;
-            background: linear-gradient(to bottom, #fff, #e9e9e9);
+            justify-content: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--button-border);
+            background: var(--button-bg);
             cursor: pointer;
             font-size: 14px;
-            transition: all 0.2s ease;
-            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+            font-weight: 500;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+            white-space: nowrap;
+            min-height: 36px;
         }
 
-        #header button:hover {
-            background: linear-gradient(to bottom, #f5f5f5, #ddd);
-            border-color: #999;
+        #header button:hover:not(:disabled) {
+            background: var(--button-hover-bg);
+            border-color: var(--text-secondary);
+            box-shadow: var(--shadow-md);
         }
 
-        #header button:active {
-            background: linear-gradient(to top, #f5f5f5, #ddd);
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+        #header button:active:not(:disabled) {
+            background: var(--button-active-bg);
+            transform: translateY(1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        #header button.primary {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        #header button.primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
         }
 
         #header button svg {
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
         }
 
         #header button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            background: linear-gradient(to bottom, #f0f0f0, #ddd);
+            background: var(--background-light);
         }
 
-        #header button:disabled:hover {
-            background: linear-gradient(to bottom, #f0f0f0, #ddd);
-            border-color: #bbb;
+        #header button .button-text {
+            display: inline;
         }
 
         #header label {
-            margin: 0 10px;
-            font-size: 14px;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
             cursor: pointer;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        #header input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
         }
 
         #runStatusDiv {
             margin-left: auto;
-            /* 右寄せにする */
-            font-weight: bold;
-            padding: 5px 12px;
-            border-radius: 6px;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
             border: 1px solid var(--border-color);
-            min-width: 60px;
+            min-width: 80px;
             text-align: center;
             transition: all 0.3s ease;
+            font-size: 13px;
+            white-space: nowrap;
         }
 
-        /* 実行状態に応じたスタイル */
         #runStatusDiv.status-error {
             background-color: var(--status-error-bg);
             color: var(--status-error-color);
@@ -147,7 +204,13 @@
             border-color: var(--status-success-color);
         }
 
-        /* メインコンテナ（Blocklyワークスペースと出力/状態パネル） */
+        #stepCounterDiv {
+            font-size: 12px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        /* メインコンテナ */
         #mainContainer {
             display: flex;
             height: calc(100% - var(--header-height));
@@ -164,45 +227,70 @@
 
         #paneLeft {
             flex: 2;
+            min-width: 300px;
         }
 
-        /* 左ペインは右の2倍の幅を初期値とする */
         #paneRight {
             flex: 1;
             min-width: 280px;
             display: flex;
             flex-direction: column;
+            border-left: 1px solid var(--border-color);
         }
 
         /* ペインのリサイズ用ハンドル */
         .resizer-v {
-            width: 8px;
+            width: 10px;
             background: var(--background-light);
             cursor: col-resize;
             border-left: 1px solid var(--border-color);
             border-right: 1px solid var(--border-color);
             transition: background-color 0.2s;
-            /* [FIX] リサイズハンドル自体がタッチイベントを受け取れるように */
             touch-action: none;
+            position: relative;
+        }
+
+        .resizer-v::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 3px;
+            height: 40px;
+            background: var(--border-color);
+            border-radius: 2px;
         }
 
         .resizer-v:hover {
-            background-color: #ddd;
+            background-color: #e5e7eb;
         }
 
         .resizer-h {
-            height: 8px;
+            height: 10px;
             background: var(--background-light);
             cursor: row-resize;
             border-top: 1px solid var(--border-color);
             border-bottom: 1px solid var(--border-color);
             transition: background-color 0.2s;
-            /* [FIX] リサイズハンドル自体がタッチイベントを受け取れるように */
             touch-action: none;
+            position: relative;
+        }
+
+        .resizer-h::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 3px;
+            background: var(--border-color);
+            border-radius: 2px;
         }
 
         .resizer-h:hover {
-            background-color: #ddd;
+            background-color: #e5e7eb;
         }
 
         /* 各パネルのコンテンツ部分 */
@@ -223,35 +311,48 @@
 
         #outputDiv,
         #stateDiv {
-            padding: 10px;
-            font-family: 'Menlo', 'Monaco', monospace;
+            padding: 12px;
+            font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
         }
 
         /* パネルのヘッダー */
         .pane-header {
-            background-color: #f0f0f0;
-            padding: 6px 12px;
+            background-color: var(--background-light);
+            padding: 10px 12px;
             font-weight: 600;
             font-size: 13px;
             border-bottom: 1px solid var(--border-color);
-            color: #555;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pane-header svg {
+            width: 16px;
+            height: 16px;
+            color: var(--text-secondary);
         }
 
         /* 内部状態表示のスタイル */
         .var-container {
-            margin-bottom: 8px;
-            padding: 5px 8px;
-            background: #fff;
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
+            margin-bottom: 12px;
+            padding: 8px 10px;
+            background: var(--background-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-sm);
         }
 
         .var-title {
-            font-weight: bold;
-            font-size: 12px;
-            margin-bottom: 4px;
-            padding-bottom: 2px;
-            border-bottom: 1px solid #f0f0f0;
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
         }
 
         .array-table,
@@ -262,46 +363,48 @@
 
         .array-table th,
         .array-table td {
-            border: 1px solid #ddd;
-            padding: 4px;
+            border: 1px solid var(--border-color);
+            padding: 6px;
             text-align: center;
-            min-width: 30px;
-            height: 30px;
-            font-size: 12px;
+            min-width: 36px;
+            height: 36px;
+            font-size: 13px;
         }
 
         .array-table th {
-            background-color: #f7f7f7;
+            background-color: var(--background-light);
+            font-weight: 600;
         }
 
         .array-box {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
+            gap: 6px;
         }
 
         .array-element {
-            width: 35px;
-            height: 35px;
-            background-color: #e9ecef;
+            width: 40px;
+            height: 40px;
+            background-color: var(--background-light);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid #ced4da;
-            border-radius: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
             position: relative;
-            font-weight: bold;
+            font-weight: 600;
             font-size: 13px;
         }
 
         .array-index {
             position: absolute;
-            top: -14px;
+            top: -16px;
             left: 0;
             right: 0;
             text-align: center;
             font-size: 10px;
-            color: #6c757d;
+            color: var(--text-secondary);
+            font-weight: 500;
         }
 
         .highlight {
@@ -309,12 +412,10 @@
         }
 
         @keyframes highlight {
-
-            /* 値が変更されたときに適用されるアニメーション */
             0%,
             50% {
-                background-color: #fff3cd;
-                border-color: #f90;
+                background-color: #fef3c7;
+                border-color: #f59e0b;
             }
 
             100% {
@@ -325,22 +426,28 @@
 
         /* 関数呼び出し・戻り値のスタイル */
         .function-call {
-            background-color: #e8f5ff;
-            border-left: 4px solid #4a86e8;
-            padding: 5px 8px;
-            margin: 5px 0;
+            background-color: #dbeafe;
+            border-left: 4px solid var(--primary-color);
+            padding: 6px 10px;
+            margin: 6px 0;
+            border-radius: 4px;
         }
 
         .function-return {
-            background-color: #e6ffe6;
-            border-left: 4px solid #6aa84f;
-            padding: 5px 8px;
-            margin: 5px 0;
+            background-color: #dcfce7;
+            border-left: 4px solid var(--status-success-color);
+            padding: 6px 10px;
+            margin: 6px 0;
+            border-radius: 4px;
         }
 
         .error-output {
-            color: #d9534f;
-            font-weight: bold;
+            color: var(--status-error-color);
+            font-weight: 600;
+            padding: 6px 10px;
+            background: var(--status-error-bg);
+            border-radius: 4px;
+            margin: 6px 0;
         }
 
         /* モーダルウィンドウのスタイル */
@@ -355,102 +462,319 @@
             align-items: center;
             justify-content: center;
             z-index: 1000;
+            padding: 16px;
         }
 
         .modal-content {
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            max-width: 80vw;
-            max-height: 80vh;
+            padding: 24px;
+            border-radius: 12px;
+            max-width: min(90vw, 800px);
+            max-height: 85vh;
             display: flex;
             flex-direction: column;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            box-shadow: var(--shadow-lg);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
         }
 
         .modal-header h2 {
             margin: 0;
+            font-size: 18px;
+            font-weight: 600;
         }
 
         .modal-close {
             background: none;
             border: none;
-            font-size: 24px;
+            font-size: 28px;
             cursor: pointer;
+            color: var(--text-secondary);
+            line-height: 1;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .modal-close:hover {
+            background: var(--background-light);
+            color: var(--text-color);
         }
 
         .modal-body {
             overflow: auto;
+            flex: 1;
         }
 
-        /* JSコード表示用のスタイル */
         .modal-body#jsCodeDiv {
-            background: #2d2d2d;
-            color: #dcdcdc;
-            padding: 10px;
-            font-family: 'Menlo', 'Monaco', monospace;
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 16px;
+            font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
             white-space: pre-wrap;
-            border-radius: 4px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .modal-body textarea {
+            width: 100%;
+            min-height: 200px;
+            font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            resize: vertical;
+        }
+
+        .modal-body button {
+            margin-top: 12px;
+            padding: 10px 16px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .modal-body button:hover {
+            background: var(--primary-hover);
+        }
+
+        /* モバイル対応のメディアクエリ */
+        @media (max-width: 768px) {
+            #header {
+                height: var(--header-height-mobile);
+                padding: 0 8px;
+                gap: 6px;
+            }
+
+            #mainContainer {
+                height: calc(100% - var(--header-height-mobile));
+                flex-direction: column;
+            }
+
+            #paneLeft {
+                flex: 1;
+                min-width: unset;
+                min-height: 200px;
+            }
+
+            #paneRight {
+                flex: 1;
+                min-width: unset;
+                border-left: none;
+                border-top: 1px solid var(--border-color);
+            }
+
+            .resizer-v {
+                display: none;
+            }
+
+            .resizer-h {
+                height: 12px;
+            }
+
+            #header button .button-text {
+                display: none;
+            }
+
+            #header button {
+                padding: 8px;
+                min-height: 32px;
+            }
+
+            #header button svg {
+                width: 20px;
+                height: 20px;
+            }
+
+            #header label {
+                font-size: 12px;
+            }
+
+            .header-divider {
+                display: none;
+            }
+
+            #runStatusDiv {
+                position: fixed;
+                bottom: 16px;
+                right: 16px;
+                z-index: 100;
+                box-shadow: var(--shadow-lg);
+            }
+
+            #stepCounterDiv {
+                display: none;
+            }
+
+            .modal-content {
+                padding: 16px;
+                max-width: 95vw;
+            }
+
+            .pane-header {
+                padding: 8px 10px;
+                font-size: 12px;
+            }
+
+            #outputDiv,
+            #stateDiv {
+                padding: 10px;
+                font-size: 12px;
+            }
+        }
+
+        /* 小さなモバイル画面用の追加調整 */
+        @media (max-width: 480px) {
+            #header button {
+                padding: 6px;
+            }
+
+            #header button svg {
+                width: 18px;
+                height: 18px;
+            }
+
+            #runStatusDiv {
+                font-size: 11px;
+                padding: 4px 10px;
+                min-width: 60px;
+            }
+        }
+
+        /* タッチデバイス用の調整 */
+        @media (hover: none) and (pointer: coarse) {
+            #header button {
+                min-height: 40px;
+                min-width: 40px;
+            }
+
+            .resizer-h {
+                height: 16px;
+            }
+
+            .resizer-v {
+                width: 16px;
+            }
         }
     </style>
 </head>
 
 <body>
-    <!-- ============================================== -->
-    <!-- ヘッダーエリア: 操作ボタンと設定               -->
-    <!-- ============================================== -->
-    <div id="header"> <button id="runButton" title="実行 (F9)"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z" />
-            </svg> 実行</button>
-        <button id="stepButton" title="ステップ実行 (F10)"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M15,18V6H13V18H15M11,18V6H9V18H11M7,18V6H5V18H7Z" />
-            </svg> ステップ</button>
-        <button id="stepBackButton" title="戻る" disabled style="display: none;"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M16,18V6H14V18H16M11,18L3,12L11,6V18M13,6V18H15V6H13Z" />
-            </svg> 戻る</button>
-        <button id="resetButton" title="リセット"><svg viewBox="0 0 24 24">
-                <path fill="currentColor"
-                    d="M12,4C14.1,4 16.1,4.8 17.6,6.3C20.7,9.4 20.7,14.5 17.6,17.6C16.1,19.1 14.1,20 12,20C9.9,20 7.9,19.2 6.4,17.6C3.3,14.5 3.3,9.4 6.4,6.3C7.9,4.8 9.9,4 12,4M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" />
-            </svg> リセット</button>
-        <button id="exportButton" title="ファイルにエクスポート"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
-            </svg></button>
-        <button id="copyXmlButton" title="XMLをクリップボードにコピー"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" />
-            </svg></button>
-        <button id="importButton" title="ファイルからインポート"><svg viewBox="0 0 24 24">
-                <path fill="currentColor" d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
-            </svg></button>
-        <input type="file" id="importFile" accept=".xml,text/xml,.txt" style="display: none;">
-        <button id="showCodeButton">コード表示</button>
-        <button id="importFromPythonButton">Pythonからインポート</button>
-        <label title="ステップ実行（戻り）機能を有効にします（β版）">
-            ステップ実行（戻り）β:
-            <input type="checkbox" id="enableStepBackCheckbox">
-        </label> <label title="配列のインデックスを1から始めるか設定します">
-            配列1始まり(1-based-indexing):
-            <input type="checkbox" id="oneBasedCheckbox">
-        </label>
-        <div id="stepCounterDiv" style="font-size: 12px; margin-left: 10px; color: #666;">ステップ: 0</div>
+    <!-- ヘッダーエリア: 操作ボタンと設定 -->
+    <div id="header">
+        <div class="header-section">
+            <button id="runButton" class="primary" title="実行 (F9)">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z" />
+                </svg>
+                <span class="button-text">実行</span>
+            </button>
+            <button id="stepButton" title="ステップ実行 (F10)">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M15,18V6H13V18H15M11,18V6H9V18H11M7,18V6H5V18H7Z" />
+                </svg>
+                <span class="button-text">ステップ</span>
+            </button>
+            <button id="stepBackButton" title="戻る" disabled style="display: none;">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M16,18V6H14V18H16M11,18L3,12L11,6V18M13,6V18H15V6H13Z" />
+                </svg>
+                <span class="button-text">戻る</span>
+            </button>
+            <button id="resetButton" title="リセット">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M12,4C14.1,4 16.1,4.8 17.6,6.3C20.7,9.4 20.7,14.5 17.6,17.6C16.1,19.1 14.1,20 12,20C9.9,20 7.9,19.2 6.4,17.6C3.3,14.5 3.3,9.4 6.4,6.3C7.9,4.8 9.9,4 12,4M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" />
+                </svg>
+                <span class="button-text">リセット</span>
+            </button>
+        </div>
+
+        <div class="header-divider"></div>
+
+        <div class="header-section">
+            <button id="exportButton" title="ファイルにエクスポート">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z" />
+                </svg>
+                <span class="button-text">保存</span>
+            </button>
+            <button id="copyXmlButton" title="XMLをクリップボードにコピー">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z" />
+                </svg>
+                <span class="button-text">コピー</span>
+            </button>
+            <button id="importButton" title="ファイルからインポート">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z" />
+                </svg>
+                <span class="button-text">開く</span>
+            </button>
+            <input type="file" id="importFile" accept=".xml,text/xml,.txt" style="display: none;">
+        </div>
+
+        <div class="header-divider"></div>
+
+        <div class="header-section">
+            <button id="showCodeButton" title="生成されたコードを表示">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M9.4,16.6L4.8,12L9.4,7.4L8,6L2,12L8,18L9.4,16.6M14.6,16.6L19.2,12L14.6,7.4L16,6L22,12L16,18L14.6,16.6Z" />
+                </svg>
+                <span class="button-text">コード</span>
+            </button>
+            <button id="importFromPythonButton" title="Pythonコードからインポート">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M19.14,7.5A2.86,2.86 0 0,1 22,10.36V14.14A2.86,2.86 0 0,1 19.14,17H12C12,17.39 12.32,17.96 12.71,17.96H17V19.64A2.86,2.86 0 0,1 14.14,22.5H9.86A2.86,2.86 0 0,1 7,19.64V15.89C7,14.31 8.28,13.04 9.86,13.04H15.11C16.69,13.04 17.96,11.76 17.96,10.18V7.5H19.14M14.86,19.29C14.46,19.29 14.14,19.59 14.14,20.18C14.14,20.77 14.46,21.07 14.86,21.07A0.89,0.89 0 0,0 15.75,20.18C15.75,19.59 15.43,19.29 14.86,19.29M4.86,17.5C3.28,17.5 2,16.22 2,14.64V10.86C2,9.28 3.28,8 4.86,8H12C12,7.61 11.68,7.04 11.29,7.04H7V5.36C7,3.78 8.28,2.5 9.86,2.5H14.14C15.72,2.5 17,3.78 17,5.36V9.11C17,10.69 15.72,11.96 14.14,11.96H8.89C7.31,11.96 6.04,13.24 6.04,14.82V17.5H4.86M9.14,5.71C9.54,5.71 9.86,5.41 9.86,4.82C9.86,4.23 9.54,3.93 9.14,3.93C8.75,3.93 8.43,4.23 8.43,4.82C8.43,5.41 8.75,5.71 9.14,5.71Z" />
+                </svg>
+                <span class="button-text">Python</span>
+            </button>
+        </div>
+
+        <div class="header-divider"></div>
+
+        <div class="header-section">
+            <label title="ステップ実行（戻り）機能を有効にします（β版）">
+                <input type="checkbox" id="enableStepBackCheckbox">
+                <span>戻り機能</span>
+            </label>
+            <label title="配列のインデックスを1から始めるか設定します">
+                <input type="checkbox" id="oneBasedCheckbox">
+                <span>1始まり</span>
+            </label>
+        </div>
+
+        <div id="stepCounterDiv">ステップ: 0</div>
         <div id="runStatusDiv">待機中</div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- メインコンテンツエリア                           -->
-    <!-- ============================================== -->
+    <!-- メインコンテンツエリア -->
     <div id="mainContainer">
         <!-- 左ペイン: Blocklyワークスペース -->
         <div id="paneLeft" class="pane">
-            <div class="pane-header">ブロック</div>
+            <div class="pane-header">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M17,13H13V17H11V13H7V11H11V7H13V11H17M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3Z" />
+                </svg>
+                ブロック
+            </div>
             <div id="blocklyDiv"></div>
         </div>
         <!-- 垂直リサイザー -->
@@ -459,22 +783,30 @@
         <div id="paneRight" class="pane">
             <!-- 出力エリア -->
             <div id="outputWrapper" style="display: flex; flex-direction: column; flex-basis: 50%; overflow: hidden;">
-                <div class="pane-header">出力</div>
+                <div class="pane-header">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M17,7H22V17H17V19A1,1 0 0,0 18,20H20V22H17.5C16.95,22 16,21.55 16,21C16,21.55 15.05,22 14.5,22H12V20H14A1,1 0 0,0 15,19V5A1,1 0 0,0 14,4H12V2H14.5C15.05,2 16,2.45 16,3C16,2.45 16.95,2 17.5,2H20V4H18A1,1 0 0,0 17,5V7M2,7H13V9H4V15H13V17H2V7M20,15V9H17V15H20Z" />
+                    </svg>
+                    出力
+                </div>
                 <div id="outputDiv"></div>
             </div>
             <!-- 水平リサイザー -->
             <div id="resizerH" class="resizer-h"></div>
             <!-- 内部状態エリア -->
             <div id="stateDivWrapper" style="display: flex; flex-direction: column; flex-grow: 1; overflow: hidden;">
-                <div class="pane-header">内部状態</div>
+                <div class="pane-header">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12,3C7.58,3 4,4.79 4,7C4,9.21 7.58,11 12,11C16.42,11 20,9.21 20,7C20,4.79 16.42,3 12,3M4,9V12C4,14.21 7.58,16 12,16C16.42,16 20,14.21 20,12V9C20,11.21 16.42,13 12,13C7.58,13 4,11.21 4,9M4,14V17C4,19.21 7.58,21 12,21C16.42,21 20,19.21 20,17V14C20,16.21 16.42,18 12,18C7.58,18 4,16.21 4,14Z" />
+                    </svg>
+                    内部状態
+                </div>
                 <div id="stateDiv" style="flex-grow: 1; overflow-y: auto;"></div>
             </div>
         </div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- モーダルウィンドウ                            -->
-    <!-- ============================================== -->
+    <!-- モーダルウィンドウ -->
     <!-- 生成コード表示モーダル -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -485,6 +817,7 @@
             <div class="modal-body" id="jsCodeDiv"></div>
         </div>
     </div>
+
     <!-- Pythonインポートモーダル -->
     <div id="pythonImportModal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -493,16 +826,17 @@
                 <button id="pythonImportModalCloseButton" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <p><b>【β版】Pythonコードからインポート</b></p>
-                <p style="font-size: 12px; color: #666;">
+                <p><strong>【β版】Pythonコードからインポート</strong></p>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
                     ごく基本的な構文のみ対応しています。複雑なコードは正しく変換されない場合があります。<br>
-                    <b>対応構文:</b> 変数代入, リスト, input, print, random.choice, if/elif/else
+                    <strong>対応構文:</strong> 変数代入, リスト, input, print, random.choice, if/elif/else
                 </p>
-                <textarea id="pythonCodeTextarea" style="width: 100%; height: 200px; margin-top: 10px; font-family: monospace; border: 1px solid #ccc; padding: 5px;"></textarea>
-                <button id="convertPythonButton" style="margin-top: 10px; padding: 8px 15px;">変換</button>
+                <textarea id="pythonCodeTextarea" placeholder="ここにPythonコードを貼り付けてください..."></textarea>
+                <button id="convertPythonButton">変換</button>
             </div>
         </div>
     </div>
+
     <!-- 実行終了通知モーダル -->
     <div id="executionFinishedModal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -516,7 +850,6 @@
         </div>
     </div>
 
-
     <!-- β機能警告モーダル -->
     <div id="betaWarningModal" class="modal-overlay" style="display: none;">
         <div class="modal-content">
@@ -525,15 +858,12 @@
                 <button id="betaWarningModalCloseButton" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <p>この機能はβ版です、ステップ実行（戻り）は正しく実行されない可能性があります。</p>
+                <p>この機能はβ版です。ステップ実行（戻り）は正しく実行されない可能性があります。</p>
             </div>
         </div>
     </div>
 
-
-    <!-- ============================================== -->
-    <!-- Blocklyツールボックス定義 (XML)                -->
-    <!-- ============================================== -->
+    <!-- Blocklyツールボックス定義 (XML) -->
     <xml id="toolbox" style="display: none">
         <category name="入出力" colour="160">
             <block type="simple_display"></block>
