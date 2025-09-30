@@ -51,6 +51,13 @@
             touch-action: none;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            box-sizing: border-box;
+        }
+
+        body {
+            padding-left: env(safe-area-inset-left, 0px);
+            padding-right: env(safe-area-inset-right, 0px);
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
 
         /* カスタムスクロールバー */
@@ -74,12 +81,13 @@
 
         /* ヘッダーセクション */
         #header {
-            height: var(--header-height);
+            height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
             background: var(--background-panel);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             padding: 0 16px;
+            padding-top: calc(env(safe-area-inset-top, 0px));
             box-sizing: border-box;
             gap: 8px;
             box-shadow: var(--shadow-sm);
@@ -213,7 +221,7 @@
         /* メインコンテナ */
         #mainContainer {
             display: flex;
-            height: calc(100% - var(--header-height));
+            height: calc(100% - var(--header-height) - env(safe-area-inset-top, 0px));
             box-sizing: border-box;
         }
 
@@ -238,6 +246,15 @@
             border-left: 1px solid var(--border-color);
         }
 
+        body.output-hidden #paneRight,
+        body.output-hidden #resizerV {
+            display: none;
+        }
+
+        body.output-hidden #paneLeft {
+            flex: 1 1 100%;
+        }
+
         /* ペインのリサイズ用ハンドル */
         .resizer-v {
             width: 10px;
@@ -248,6 +265,55 @@
             transition: background-color 0.2s;
             touch-action: none;
             position: relative;
+        }
+
+        #outputToggleButton {
+            position: fixed;
+            left: 50%;
+            bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            transform: translateX(-50%);
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: 1px solid var(--primary-color);
+            background: var(--primary-color);
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: var(--shadow-lg);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+            cursor: pointer;
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        #outputToggleButton svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        #outputToggleButton[aria-pressed="false"] {
+            background: var(--button-bg);
+            color: var(--text-color);
+            border-color: var(--button-border);
+        }
+
+        #outputToggleButton[aria-pressed="false"] svg {
+            color: var(--text-secondary);
+        }
+
+        @media (max-width: 600px) {
+            #outputToggleButton {
+                padding: 9px 14px;
+                font-size: 13px;
+                gap: 6px;
+            }
+
+            #outputToggleButton svg {
+                width: 16px;
+                height: 16px;
+            }
         }
 
         .resizer-v::after {
@@ -299,6 +365,10 @@
         #stateDiv {
             flex-grow: 1;
             overflow: auto;
+        }
+
+        #blocklyDiv {
+            min-height: 0;
         }
 
         #outputDiv {
@@ -806,6 +876,13 @@
         </div>
     </div>
 
+    <button id="outputToggleButton" class="floating-toggle" type="button" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M3,5H5V19H3V5M7,5H9V19H7V5M11,5H13V19H11V5M15,5H17V19H15V5M19,5H21V19H19V5Z" />
+        </svg>
+        <span>出力エリア: 表示中</span>
+    </button>
+
     <!-- モーダルウィンドウ -->
     <!-- 生成コード表示モーダル -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
@@ -923,6 +1000,8 @@
             const enableStepBackCheckbox = document.getElementById('enableStepBackCheckbox');
             const betaWarningModal = document.getElementById('betaWarningModal');
             const betaWarningModalCloseButton = document.getElementById('betaWarningModalCloseButton');
+            const outputToggleButton = document.getElementById('outputToggleButton');
+            const paneLeft = document.getElementById('paneLeft');
 
             // β機能（ステップバック）有効化チェックボックスの処理
             enableStepBackCheckbox.addEventListener('change', () => {
@@ -945,6 +1024,8 @@
             let myInterpreter = null;       // JS-Interpreterのインスタンス
             let runnerTimeoutId = null;     // To hold the timeout ID for the runner
             let workspace = null;           // Blocklyのワークスペースインスタンス
+            let workspaceUsesHorizontalToolbox = null;
+            let hasLoadedInitialBlocks = false;
             let oneBasedMode = false;       // 配列のインデックスを1から始めるモードか
             let ignoreBreakpoints = false;  // 一括実行時にブレークポイントを無視するか
             let isPausedForAsync = false;   // 非同期処理による一時停止中かを示すフラグ
@@ -968,6 +1049,62 @@
             let outputBuffer = [];
             let isFlushScheduled = false;
             let outputFlushRequestId = null;
+
+            //======================================================================
+            // 出力ペインの表示制御
+            //======================================================================
+            function updateOutputToggleLabel(isVisible) {
+                if (!outputToggleButton) return;
+                outputToggleButton.setAttribute('aria-pressed', String(isVisible));
+                const labelSpan = outputToggleButton.querySelector('span');
+                if (labelSpan) {
+                    labelSpan.textContent = isVisible ? '出力エリア: 表示中' : '出力エリア: 非表示';
+                }
+            }
+
+            function setOutputVisibility(shouldShow, { focusButton = false } = {}) {
+                document.body.classList.toggle('output-hidden', !shouldShow);
+
+                if (paneLeft) {
+                    if (shouldShow) {
+                        const previousFlex = paneLeft.dataset.collapsedFlex;
+                        if (previousFlex !== undefined) {
+                            if (previousFlex) {
+                                paneLeft.style.flex = previousFlex;
+                            } else {
+                                paneLeft.style.removeProperty('flex');
+                            }
+                        }
+                        delete paneLeft.dataset.collapsedFlex;
+                    } else {
+                        paneLeft.dataset.collapsedFlex = paneLeft.style.flex || '';
+                        paneLeft.style.flex = '1 1 auto';
+                    }
+                }
+
+                if (outputToggleButton) {
+                    updateOutputToggleLabel(shouldShow);
+
+                    if (focusButton) {
+                        outputToggleButton.focus({ preventScroll: true });
+                    }
+                }
+
+                if (workspace) {
+                    requestAnimationFrame(() => {
+                        Blockly.svgResize(workspace);
+                    });
+                }
+            }
+
+            if (outputToggleButton) {
+                outputToggleButton.addEventListener('click', () => {
+                    const willShow = document.body.classList.contains('output-hidden');
+                    setOutputVisibility(willShow, { focusButton: true });
+                });
+            }
+
+            setOutputVisibility(true);
 
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
@@ -2390,6 +2527,7 @@
 
             function runAll() {
                 // 実行前に状態をリセット
+                setOutputVisibility(true);
                 if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
                 myInterpreter = null;
                 window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
@@ -2580,15 +2718,106 @@
             }
 
             //======================================================================
-            // アプリケーションの初期化とイベントリスナー設定
+            // Blocklyワークスペースのレイアウト制御
             //======================================================================
-            // Blocklyワークスペースを注入（生成）
-            workspace = Blockly.inject('blocklyDiv', {
-                toolbox: document.getElementById('toolbox'),
-                scrollbars: true,
-                zoom: { controls: true, wheel: true }
-            });
-            window.workspace = workspace; // Make workspace global for Playwright tests
+            function shouldUseHorizontalToolbox() {
+                if (window.innerWidth <= 768) {
+                    return true;
+                }
+                return window.innerHeight > window.innerWidth;
+            }
+
+            function injectWorkspace(horizontalLayout, savedState = null, xmlBackup = null) {
+                const toolboxElement = document.getElementById('toolbox');
+                if (!toolboxElement) {
+                    return;
+                }
+
+                workspace = Blockly.inject('blocklyDiv', {
+                    toolbox: toolboxElement,
+                    scrollbars: true,
+                    toolboxPosition: horizontalLayout ? 'top' : 'start',
+                    horizontalLayout,
+                    zoom: { controls: true, wheel: true }
+                });
+                window.workspace = workspace; // Make workspace global for Playwright tests
+                workspaceUsesHorizontalToolbox = horizontalLayout;
+
+                let restored = false;
+                if (savedState && Blockly.serialization && Blockly.serialization.workspaces) {
+                    try {
+                        Blockly.serialization.workspaces.load(savedState, workspace);
+                        restored = true;
+                    } catch (e) {
+                        console.error('Failed to restore workspace state via serialization:', e);
+                    }
+                }
+
+                if (!restored && xmlBackup) {
+                    try {
+                        const xmlDom = Blockly.utils.xml.textToDom(xmlBackup);
+                        Blockly.Xml.domToWorkspace(xmlDom, workspace);
+                        restored = true;
+                    } catch (e) {
+                        console.error('Failed to restore workspace state via XML:', e);
+                    }
+                }
+
+                if (!restored && !hasLoadedInitialBlocks) {
+                    try {
+                        const startXml = document.getElementById('startBlocks');
+                        if (startXml.innerHTML.trim()) {
+                            Blockly.Xml.domToWorkspace(startXml, workspace);
+                        }
+                    } catch (e) {
+                        console.error('Error loading start blocks:', e);
+                        displayOutput('起動時のブロック読み込みエラー: ' + e.message, true);
+                    }
+                    hasLoadedInitialBlocks = true;
+                    restored = true;
+                }
+
+                if (!restored) {
+                    workspace.scrollCenter();
+                }
+
+                requestAnimationFrame(() => {
+                    Blockly.svgResize(workspace);
+                });
+            }
+
+            function refreshWorkspaceLayout(force = false) {
+                const shouldBeHorizontal = shouldUseHorizontalToolbox();
+                if (!force && workspace && shouldBeHorizontal === workspaceUsesHorizontalToolbox) {
+                    return;
+                }
+
+                let savedState = null;
+                let xmlBackup = null;
+                if (workspace) {
+                    if (Blockly.serialization && Blockly.serialization.workspaces) {
+                        try {
+                            savedState = Blockly.serialization.workspaces.save(workspace);
+                        } catch (e) {
+                            console.error('Failed to serialize workspace state:', e);
+                        }
+                    }
+
+                    try {
+                        const xmlDom = Blockly.Xml.workspaceToDom(workspace);
+                        xmlBackup = Blockly.Xml.domToText(xmlDom);
+                    } catch (e) {
+                        console.error('Failed to capture workspace XML backup:', e);
+                    }
+
+                    workspace.dispose();
+                }
+
+                injectWorkspace(shouldBeHorizontal, savedState, xmlBackup);
+            }
+
+            refreshWorkspaceLayout(true);
+            setOutputVisibility(true);
             // --- ボタンのイベントリスナー ---
             document.getElementById('runButton').addEventListener('click', runAll);
             document.getElementById('stepButton').addEventListener('click', stepCode);
@@ -3176,7 +3405,12 @@
             }
 
             // --- ウィンドウリサイズ時の処理 ---
-            window.addEventListener('resize', () => Blockly.svgResize(workspace));
+            window.addEventListener('resize', () => {
+                refreshWorkspaceLayout();
+                if (workspace) {
+                    Blockly.svgResize(workspace);
+                }
+            });
 
             // --- ページを離れる前の確認 ---
             window.addEventListener('beforeunload', (event) => {
@@ -3186,19 +3420,6 @@
                 }
             });
 
-            // --- 初期ブロックの読み込み ---
-            try {
-                const startXml = document.getElementById('startBlocks');
-                if (startXml.innerHTML.trim()) {
-                    Blockly.Xml.domToWorkspace(startXml, workspace);
-                }
-            } catch (e) {
-                console.error("Error loading start blocks:", e);
-                displayOutput("起動時のブロック読み込みエラー: " + e.message, true);
-            }
-
-            // --- ワークスペースを中央にスクロール ---
-            workspace.scrollCenter();
         });
     </script>
 </body>
