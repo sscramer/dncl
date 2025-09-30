@@ -10,7 +10,7 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>DNCL Simulator (v2.5)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
@@ -39,6 +39,10 @@
             --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             --primary-color: #3b82f6;
             --primary-hover: #2563eb;
+            --safe-area-inset-top: env(safe-area-inset-top);
+            --safe-area-inset-right: env(safe-area-inset-right);
+            --safe-area-inset-bottom: env(safe-area-inset-bottom);
+            --safe-area-inset-left: env(safe-area-inset-left);
         }
 
         html,
@@ -51,6 +55,7 @@
             touch-action: none;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            padding-bottom: var(--safe-area-inset-bottom);
         }
 
         /* カスタムスクロールバー */
@@ -74,12 +79,14 @@
 
         /* ヘッダーセクション */
         #header {
-            height: var(--header-height);
+            height: calc(var(--header-height) + var(--safe-area-inset-top));
             background: var(--background-panel);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            padding: 0 16px;
+            padding: var(--safe-area-inset-top) 16px 0;
+            padding-left: calc(16px + var(--safe-area-inset-left));
+            padding-right: calc(16px + var(--safe-area-inset-right));
             box-sizing: border-box;
             gap: 8px;
             box-shadow: var(--shadow-sm);
@@ -213,7 +220,7 @@
         /* メインコンテナ */
         #mainContainer {
             display: flex;
-            height: calc(100% - var(--header-height));
+            height: calc(100% - (var(--header-height) + var(--safe-area-inset-top)));
             box-sizing: border-box;
         }
 
@@ -556,6 +563,39 @@
             background: var(--primary-hover);
         }
 
+        #togglePaneButton {
+            display: none; /* デスクトップでは非表示 */
+            position: fixed;
+            bottom: calc(16px + var(--safe-area-inset-bottom));
+            right: calc(16px + var(--safe-area-inset-right));
+            width: 56px;
+            height: 56px;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease;
+        }
+
+        #togglePaneButton:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #togglePaneButton svg {
+            width: 28px;
+            height: 28px;
+            transition: transform 0.3s ease;
+        }
+
+        #togglePaneButton.open svg {
+            transform: rotate(180deg);
+        }
+
         /* モバイル対応のメディアクエリ */
         @media (max-width: 768px) {
             #header {
@@ -576,10 +616,57 @@
             }
 
             #paneRight {
+                display: none; /* モバイルではデフォルトで非表示 */
                 flex: 1;
                 min-width: unset;
                 border-left: none;
                 border-top: 1px solid var(--border-color);
+            }
+
+            #paneRight.mobile-pane-visible {
+                display: flex; /* このクラスが付与されたら表示 */
+            }
+
+            #togglePaneButton {
+                display: flex; /* モバイルでのみ表示 */
+            }
+
+            /* Blocklyツールボックスのモバイル対応 */
+            .blocklyToolboxDiv {
+                background-color: var(--background-light);
+            }
+            .blocklyToolboxContents {
+                display: flex;
+                flex-direction: row !important;
+                flex-wrap: wrap;
+                gap: 6px;
+                padding: 8px !important;
+            }
+            .blocklyTreeRow {
+                display: inline-block !important;
+                background-color: var(--background-panel) !important;
+                border: 1px solid var(--border-color) !important;
+                border-radius: 8px !important;
+                padding: 6px 12px !important;
+                margin: 0 !important;
+                box-shadow: var(--shadow-sm);
+                transition: all 0.15s ease;
+            }
+            .blocklyTreeRow.blocklyTreeSelected {
+                background-color: var(--primary-color) !important;
+                color: white !important;
+                border-color: var(--primary-hover) !important;
+                box-shadow: var(--shadow-md);
+            }
+            .blocklyTreeRow:hover:not(.blocklyTreeSelected) {
+                background-color: var(--button-hover-bg) !important;
+                border-color: var(--text-secondary);
+            }
+            .blocklyTreeSeparator {
+                display: none !important;
+            }
+            .blocklyFlyout {
+                border-left: 1px solid var(--border-color) !important;
             }
 
             .resizer-v {
@@ -805,6 +892,13 @@
             </div>
         </div>
     </div>
+
+    <!-- モバイル用出力パネル表示切り替えボタン -->
+    <button id="togglePaneButton" title="出力/状態パネル表示切替">
+        <svg viewBox="0 0 24 24">
+            <path fill="currentColor" d="M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z" />
+        </svg>
+    </button>
 
     <!-- モーダルウィンドウ -->
     <!-- 生成コード表示モーダル -->
@@ -2400,6 +2494,14 @@
                 isPausedForAsync = false;
                 executionHistory.interpreterStepCounter = 0;
 
+                // モバイルで実行時に出力パネルを自動的に表示
+                const paneRight = document.getElementById('paneRight');
+                const togglePaneButton = document.getElementById('togglePaneButton');
+                if (window.innerWidth <= 768 && !paneRight.classList.contains('mobile-pane-visible')) {
+                    paneRight.classList.add('mobile-pane-visible');
+                    togglePaneButton.classList.add('open');
+                }
+
                 if (!prepareInterpreter()) return;
 
                 ignoreBreakpoints = true;
@@ -2660,6 +2762,14 @@
             // --- リサイザーの初期化 ---
             setupResizer(document.getElementById('resizerV'), true);
             setupResizer(document.getElementById('resizerH'), false);
+
+            // --- モバイル用パネル切り替えボタンのロジック ---
+            const togglePaneButton = document.getElementById('togglePaneButton');
+            const paneRight = document.getElementById('paneRight');
+            togglePaneButton.addEventListener('click', () => {
+                paneRight.classList.toggle('mobile-pane-visible');
+                togglePaneButton.classList.toggle('open');
+            });
 
             //======================================================================
             // PythonからBlocklyへの変換
