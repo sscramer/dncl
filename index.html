@@ -637,6 +637,7 @@
             // [FIX] パフォーマンス改善のため、出力バッファリングを追加
             let outputBuffer = [];
             let isFlushScheduled = false;
+            let outputFlushRequestId = null;
 
             // JavaScriptジェネレータで使う演算子の優先順位
             const ORDER_ATOMIC = 0;
@@ -847,6 +848,8 @@
              * 実行履歴にスナップショットを保存する
              */
             function saveExecutionSnapshot() {
+                // スナップショット取得前に出力内容を確実に反映させる
+                flushOutputImmediately();
                 const snapshot = captureExecutionSnapshot();
                 if (!snapshot) return;
 
@@ -879,6 +882,8 @@
                 if (!snapshot) return;
 
                 try {
+                    // DOM復元前に保留中の出力を破棄して表示崩れを防ぐ
+                    resetOutputBuffer();
                     window.debugVars = deepClone(snapshot.debugVars);
                     document.getElementById('outputDiv').innerHTML = snapshot.outputHtml;
 
@@ -1126,6 +1131,8 @@
              * [FIX] パフォーマンス改善のため、出力をバッファリングし、requestAnimationFrameでまとめてDOMに書き込む
              */
             function flushOutput() {
+                // 呼び出し時点で保留中のアニメーションフレームは無効化される
+                outputFlushRequestId = null;
                 if (outputBuffer.length === 0) {
                     isFlushScheduled = false;
                     return;
@@ -1169,8 +1176,31 @@
 
                 if (!isFlushScheduled) {
                     isFlushScheduled = true;
-                    requestAnimationFrame(flushOutput);
+                    outputFlushRequestId = requestAnimationFrame(flushOutput);
                 }
+            }
+
+            /**
+             * バッファに溜まっている出力を即座にDOMへ反映させる
+             */
+            function flushOutputImmediately() {
+                if (outputFlushRequestId !== null) {
+                    cancelAnimationFrame(outputFlushRequestId);
+                    outputFlushRequestId = null;
+                }
+                flushOutput();
+            }
+
+            /**
+             * 保留中の出力フラッシュ要求を破棄し、バッファをクリアする
+             */
+            function resetOutputBuffer() {
+                if (outputFlushRequestId !== null) {
+                    cancelAnimationFrame(outputFlushRequestId);
+                    outputFlushRequestId = null;
+                }
+                outputBuffer = [];
+                isFlushScheduled = false;
             }
 
             /**
