@@ -1622,10 +1622,10 @@
             // Blockly ブロック定義とJavaScriptコード生成
             //======================================================================
             // --- ブロックの見た目を定義 (JSON) ---
-            Blockly.defineBlocksWithJsonArray([
+            window.BLOCK_DEFINITIONS = [
                 { "type": "assignment", "message0": "%1 = %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数に値を代入する" },
                 { "type": "number_literal", "message0": "%1", "args0": [{ "type": "field_number", "name": "NUM", "value": 0 }], "output": "Number", "colour": 230, "tooltip": "数値を入力する" },
-                { "type": "string_literal", "message0": "「%1」", "args0": [{ "type": "field_input", "name": "TEXT", "text": "テキスト" }], "output": "String", "colour": 230, "tooltip": "文字列を入力する" },
+                { "type": "string_literal", "message0": "\"%1\"", "args0": [{ "type": "field_input", "name": "TEXT", "text": "テキスト" }], "output": "String", "colour": 230, "tooltip": "文字列を入力する" },
                 { "type": "external_input", "message0": "外部入力 (%1)", "args0": [{ "type": "field_dropdown", "name": "TYPE", "options": [["文字列", "STRING"], ["数値", "NUMBER"]] }], "output": null, "colour": 160, "tooltip": "ユーザーからの入力を受け取る" },
                 { "type": "variable_access", "message0": "変数 %1", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }], "output": null, "colour": 230, "tooltip": "変数の値を取得する" },
                 { "type": "array_assignment_1d", "message0": "%1 [ %2 ] = %3", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "1次元配列の要素に値を代入する" },
@@ -1634,13 +1634,14 @@
                 { "type": "array_assignment_full_2d", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "1,2;3,4" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列全体に値を代入する（行はセミコロン、要素はカンマ区切り）" },
                 { "type": "array_access_1d", "message0": "%1 [ %2 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }], "output": null, "colour": 260, "tooltip": "1次元配列の要素を参照する" },
                 { "type": "array_access_2d", "message0": "%1 [ %2, %3 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }], "output": null, "colour": 260, "tooltip": "2次元配列の要素を参照する" },
-                { "type": "array_length", "message0": "配列または文字列 %1 の長さ", "args0": [{ "type": "input_value", "name": "ARRAY", "check": ["Array", "String"] }], "output": "Number", "colour": 260, "tooltip": "配列または文字列の長さを返します" },
-                { "type": "arithmetic", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Number" }, { "type": "field_dropdown", "name": "OP", "options": [["+", "+"], ["-", "-"], ["×", "*"], ["/", "/"], ["÷", "÷"], ["%", "%"]] }, { "type": "input_value", "name": "B", "check": "Number" }], "inputsInline": true, "output": "Number", "colour": 230, "tooltip": "算術演算" },
+                { "type": "array_length", "message0": "要素数(%1)", "args0": [{ "type": "input_value", "name": "ARRAY", "check": ["Array", "String"] }], "output": "Number", "colour": 260, "tooltip": "配列の要素数を返します" },
+                { "type": "arithmetic", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Number" }, { "type": "field_dropdown", "name": "OP", "options": [["+", "+"], ["-", "-"], ["*", "*"], ["/", "/"], ["÷", "÷"], ["%", "%"], ["**", "**"]] }, { "type": "input_value", "name": "B", "check": "Number" }], "inputsInline": true, "output": "Number", "colour": 230, "tooltip": "算術演算" },
                 // [FIX] 比較演算子の表示を変更し、インライン表示を明示
                 { "type": "comparison", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A" }, { "type": "field_dropdown", "name": "OP", "options": [["==", "==="], ["!=", "!=="], [">", ">"], [">=", ">="], ["<", "<"], ["<=", "<="]] }, { "type": "input_value", "name": "B" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "比較演算子" },
                 // [FIX] 論理演算子にインライン表示を明示
-                { "type": "logic_operation_jp", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Boolean" }, { "type": "field_dropdown", "name": "OP", "options": [["かつ", "&&"], ["または", "||"]] }, { "type": "input_value", "name": "B", "check": "Boolean" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "論理演算子（and/or）" },
-                { "type": "logic_negate_jp", "message0": "でない %1", "args0": [{ "type": "input_value", "name": "BOOL", "check": "Boolean" }], "output": "Boolean", "colour": 210, "tooltip": "論理否定" },
+                { "type": "logic_operation_jp", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Boolean" }, { "type": "field_dropdown", "name": "OP", "options": [["and", "&&"], ["or", "||"]] }, { "type": "input_value", "name": "B", "check": "Boolean" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "論理演算子（and/or）" },
+                { "type": "logic_negate_jp", "message0": "not %1", "args0": [{ "type": "input_value", "name": "BOOL", "check": "Boolean" }], "output": "Boolean", "colour": 210, "tooltip": "論理否定" },
+                { "type": "boolean_literal", "message0": "%1", "args0": [{ "type": "field_dropdown", "name": "BOOL", "options": [["True", "TRUE"], ["False", "FALSE"]] }], "output": "Boolean", "colour": 210, "tooltip": "真偽値" },
                 { "type": "if_statement", "message0": "もし %1 ならば\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if文" },
                 { "type": "if_else_statement", "message0": "もし %1 ならば\n%2\nそうでなければ\n%3", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO0" }, { "type": "input_statement", "name": "ELSE" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if-else文" },
                 { "type": "while_loop", "message0": "%1 の間、繰り返す\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "whileループ" },
@@ -1650,13 +1651,15 @@
                 { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
                 { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
                 { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
-                { "type": "random_float", "message0": "0から1の乱数 (小数)", "output": "Number", "colour": 230, "tooltip": "0.0以上1.0未満の小数の乱数を生成する" },
+                { "type": "random_float", "message0": "乱数()", "output": "Number", "colour": 230, "tooltip": "0.0以上1.0未満の小数の乱数を生成する" },
                 { "type": "random_choice", "message0": "リスト %1 からランダムに選ぶ", "args0": [{ "type": "input_value", "name": "LIST", "check": "Array" }], "output": null, "colour": 230, "tooltip": "リストからランダムに要素を1つ選ぶ" },
+                { "type": "integer_cast", "message0": "整数(%1)", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "小数を整数に変換する" },
                 { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
                 { "type": "simple_display", "message0": "表示する %1 %2", "args0": [{ "type": "input_value", "name": "VALUE" }, { "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "値を表示する（改行の有無を選択）" },
                 { "type": "display", "message0": "表示項目 %1", "args0": [{ "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" },
                 { "type": "breakpoint", "message0": "ブレークポイント %1", "args0": [{ "type": "input_value", "name": "NUMBER", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 0, "tooltip": "指定した番号のブレークポイントで処理を一時停止する" }
-            ]);
+            ];
+            Blockly.defineBlocksWithJsonArray(window.BLOCK_DEFINITIONS);
 
             // --- 「表示する」ブロックの動的な入力変化 (Mutator) のための定義 ---
             Blockly.Blocks['display_mutator_container'] = {
@@ -1691,10 +1694,11 @@
             Blockly.JavaScript['array_access_1d'] = (block) => [`safeArrayAccess(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['array_access_2d'] = (block) => [`safeArrayAccess2d(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['array_length'] = function(block) { const array = Blockly.JavaScript.valueToCode(block, 'ARRAY', ORDER_MEMBER) || '[]'; return [array + '.length', ORDER_MEMBER]; };
-            Blockly.JavaScript['arithmetic'] = function (block) { if (block.getFieldValue('OP') === '÷') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.floor(${a} / ${b})`, ORDER_FUNCTION_CALL]; } const OPERATORS = { '+': [' + ', ORDER_ADDITION], '-': [' - ', ORDER_SUBTRACTION], '*': [' * ', ORDER_MULTIPLICATION], '/': [' / ', ORDER_DIVISION], '%': [' % ', ORDER_MODULUS], }; const tuple = OPERATORS[block.getFieldValue('OP')]; const operator = tuple[0]; const order = tuple[1]; const argument0 = Blockly.JavaScript.valueToCode(block, 'A', order) || '0'; const argument1 = Blockly.JavaScript.valueToCode(block, 'B', order) || '0'; const code = argument0 + operator + argument1; return [code, order]; };
+            Blockly.JavaScript['arithmetic'] = function (block) { const op = block.getFieldValue('OP'); if (op === '÷') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.floor(${a} / ${b})`, ORDER_FUNCTION_CALL]; } if (op === '**') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.pow(${a}, ${b})`, ORDER_FUNCTION_CALL]; } const OPERATORS = { '+': [' + ', ORDER_ADDITION], '-': [' - ', ORDER_SUBTRACTION], '*': [' * ', ORDER_MULTIPLICATION], '/': [' / ', ORDER_DIVISION], '%': [' % ', ORDER_MODULUS], }; const tuple = OPERATORS[op]; const operator = tuple[0]; const order = tuple[1]; const argument0 = Blockly.JavaScript.valueToCode(block, 'A', order) || '0'; const argument1 = Blockly.JavaScript.valueToCode(block, 'B', order) || '0'; const code = argument0 + operator + argument1; return [code, order]; };
             Blockly.JavaScript['comparison'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'A', ORDER_RELATIONAL) || '0'} ${block.getFieldValue('OP')} ${Blockly.JavaScript.valueToCode(block, 'B', ORDER_RELATIONAL) || '0'})`, ORDER_RELATIONAL];
             Blockly.JavaScript['logic_operation_jp'] = (block) => { const op = block.getFieldValue('OP'); const order = op === '&&' ? ORDER_LOGICAL_AND : ORDER_LOGICAL_OR; return [`(${Blockly.JavaScript.valueToCode(block, 'A', order) || 'false'} ${op} ${Blockly.JavaScript.valueToCode(block, 'B', order) || 'false'})`, order]; };
             Blockly.JavaScript['logic_negate_jp'] = (block) => [`(!${Blockly.JavaScript.valueToCode(block, 'BOOL', ORDER_LOGICAL_NOT) || 'false'})`, ORDER_LOGICAL_NOT];
+            Blockly.JavaScript['boolean_literal'] = (block) => [block.getFieldValue('BOOL') === 'TRUE' ? 'true' : 'false', ORDER_ATOMIC];
             Blockly.JavaScript['if_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
             Blockly.JavaScript['if_else_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO0')}} else {\n${Blockly.JavaScript.statementToCode(block, 'ELSE')}}\n`;
             Blockly.JavaScript['while_loop'] = (block) => `while (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
@@ -1710,6 +1714,7 @@
                 const code = `${list}[Math.floor(Math.random() * ${list}.length)]`;
                 return [code, ORDER_FUNCTION_CALL];
             };
+            Blockly.JavaScript['integer_cast'] = (block) => [`Math.floor(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
             Blockly.JavaScript['display_binary'] = (block) => `displayBinary(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'});\n`;
             Blockly.JavaScript['simple_display'] = (block) => { const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${value}, false, ${newline});\n`; };
             Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
@@ -1927,6 +1932,7 @@
                     '/': [' / ', Blockly.Python.ORDER_MULTIPLICATIVE],
                     '÷': [' // ', Blockly.Python.ORDER_MULTIPLICATIVE],
                     '%': [' % ', Blockly.Python.ORDER_MULTIPLICATIVE],
+                    '**': [' ** ', Blockly.Python.ORDER_EXPONENTIATION],
                 };
                 const tuple = OPERATORS[block.getFieldValue('OP')];
                 const operator = tuple[0];
@@ -1959,6 +1965,8 @@
             };
 
             Blockly.Python['logic_negate_jp'] = (block) => [`not ${Blockly.Python.valueToCode(block, 'BOOL', Blockly.Python.ORDER_LOGICAL_NOT) || 'False'}`, Blockly.Python.ORDER_LOGICAL_NOT];
+
+            Blockly.Python['boolean_literal'] = (block) => [block.getFieldValue('BOOL') === 'TRUE' ? 'True' : 'False', Blockly.Python.ORDER_ATOMIC];
 
             Blockly.Python['if_statement'] = function(block) {
                 const condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
@@ -2029,6 +2037,7 @@
                 return [`random.choice(${list})`, Blockly.Python.ORDER_FUNCTION_CALL];
             };
 
+            Blockly.Python['integer_cast'] = (block) => [`int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})`, Blockly.Python.ORDER_FUNCTION_CALL];
             Blockly.Python['display_binary'] = (block) => `print(bin(int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})))\n`;
 
             Blockly.Python['simple_display'] = function(block) {
