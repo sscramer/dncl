@@ -888,6 +888,7 @@
             <block type="array_length"></block>
         </category>
         <category name="計算" colour="230">
+            <block type="math_free_input"></block>
             <block type="arithmetic"></block>
             <block type="square"></block>
             <block type="power"></block>
@@ -1623,6 +1624,7 @@
             //======================================================================
             // --- ブロックの見た目を定義 (JSON) ---
             window.BLOCK_DEFINITIONS = [
+                { "type": "math_free_input", "message0": "数式 %1", "args0": [{ "type": "field_input", "name": "MATH_INPUT", "text": "3*2-1*i" }], "output": null, "colour": 230, "tooltip": "数式を自由入力します" },
                 { "type": "assignment", "message0": "%1 = %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数に値を代入する" },
                 { "type": "number_literal", "message0": "%1", "args0": [{ "type": "field_number", "name": "NUM", "value": 0 }], "output": "Number", "colour": 230, "tooltip": "数値を入力する" },
                 { "type": "string_literal", "message0": "\"%1\"", "args0": [{ "type": "field_input", "name": "TEXT", "text": "テキスト" }], "output": "String", "colour": 230, "tooltip": "文字列を入力する" },
@@ -1719,7 +1721,28 @@
             Blockly.JavaScript['simple_display'] = (block) => { const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${value}, false, ${newline});\n`; };
             Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
             Blockly.JavaScript['breakpoint'] = function (block) { const number = Blockly.JavaScript.valueToCode(block, 'NUMBER', ORDER_NONE) || 'null'; return `checkBreakpoint(${number});\n`; };
+            Blockly.JavaScript['math_free_input'] = function (block) {
+                let math_input = block.getFieldValue('MATH_INPUT');
 
+                // 2次元配列のアクセス M[i, j] を safeArrayAccess2d(M, i, j) に置換
+                math_input = math_input.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([^,]+?)\s*,\s*([^\]]+?)\s*\]/g, 'safeArrayAccess2d($1, $2, $3)');
+
+                // 1次元配列のアクセス A[i] を safeArrayAccess(A, i) に置換
+                math_input = math_input.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([^\]]+?)\s*\]/g, 'safeArrayAccess($1, $2)');
+
+                // ワークスペース上の全ての変数を取得
+                const allVariables = workspace.getAllVariables();
+                const varNames = allVariables.map(v => v.name);
+                const uniqueVarNames = [...new Set(varNames)];
+
+                // 安全な評価関数を呼び出すコードを生成
+                // IIFE（即時実行関数）を使い、変数を引数として渡すことで、安全なスコープで式を評価する
+                const code = `(function(${uniqueVarNames.join(',')}) {
+                    return ${math_input};
+                })(${uniqueVarNames.join(',')})`;
+
+                return [code, ORDER_FUNCTION_CALL];
+            };
             Blockly.Python['procedures_defreturn'] = function(block) {
                 const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
                 let xfix1 = '';
