@@ -1,0 +1,2331 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // β機能（ステップバック）関連の要素を取得
+    const stepBackButton = document.getElementById('stepBackButton');
+    const enableStepBackCheckbox = document.getElementById('enableStepBackCheckbox');
+    const betaWarningModal = document.getElementById('betaWarningModal');
+    const betaWarningModalCloseButton = document.getElementById('betaWarningModalCloseButton');
+
+    // β機能（ステップバック）有効化チェックボックスの処理
+    enableStepBackCheckbox.addEventListener('change', () => {
+        if (enableStepBackCheckbox.checked) {
+            stepBackButton.style.display = 'flex';
+            betaWarningModal.style.display = 'flex';
+        } else {
+            stepBackButton.style.display = 'none';
+        }
+    });
+
+    // β機能警告モーダルを閉じる
+    betaWarningModalCloseButton.addEventListener('click', () => {
+        betaWarningModal.style.display = 'none';
+    });
+
+    //======================================================================
+    // グローバル変数と定数
+    //======================================================================
+    let myInterpreter = null;       // JS-Interpreterのインスタンス
+    let runnerTimeoutId = null;     // To hold the timeout ID for the runner
+    let workspace = null;           // Blocklyのワークスペースインスタンス
+    let oneBasedMode = false;       // 配列のインデックスを1から始めるモードか
+    let ignoreBreakpoints = false;  // 一括実行時にブレークポイントを無視するか
+    let isPausedForAsync = false;   // 非同期処理による一時停止中かを示すフラグ
+    let previousDebugVars = {};     // 前回の変数の状態を保持（変更検出用）
+    let currentHighlightedBlockId = null; // 現在ハイライトされているブロックID
+    const EXECUTION_TIMEOUT_STEPS = 200000000; // 無限ループ防止用の最大実行ステップ数
+
+    // 実行履歴管理用のグローバル変数
+    const executionHistory = {
+        snapshots: [],              // 実行状態のスナップショット配列
+        currentIndex: -1,           // 現在のスナップショットインデックス
+        maxHistorySize: 500,        // 最大履歴保存数
+        stepCounter: 0,             // ステップカウンター (ユーザー操作単位)
+        interpreterStepCounter: 0   // Interpreter内部のステップカウンター
+    };
+
+    // インタプリタ内の変数を監視するためのグローバルオブジェクト
+    window.debugVars = {};
+
+    // [FIX] パフォーマンス改善のため、出力バッファリングを追加
+    let outputBuffer = [];
+    let isFlushScheduled = false;
+    let outputFlushRequestId = null;
+
+    // JavaScriptジェネレータで使う演算子の優先順位
+    const ORDER_ATOMIC = 0;
+    const ORDER_MEMBER = 1;
+    const ORDER_NONE = 99;
+    const ORDER_ASSIGNMENT = 2;
+    const ORDER_FUNCTION_CALL = 2;
+    const ORDER_MULTIPLICATION = 5;
+    const ORDER_DIVISION = 5;
+    const ORDER_MODULUS = 5;
+    const ORDER_ADDITION = 6;
+    const ORDER_SUBTRACTION = 6;
+    const ORDER_LOGICAL_NOT = 4;
+    const ORDER_LOGICAL_AND = 11;
+    const ORDER_LOGICAL_OR = 12;
+    const ORDER_RELATIONAL = 8;
+
+    //======================================================================
+    // Pythonジェネレータの準備
+    //======================================================================
+    Blockly.Python = new Blockly.Generator('Python');
+    Blockly.Python.ORDER_ATOMIC = 0;
+    Blockly.Python.ORDER_MEMBER = 1.1;
+    Blockly.Python.ORDER_FUNCTION_CALL = 2;
+    Blockly.Python.ORDER_EXPONENTIATION = 3;
+    Blockly.Python.ORDER_UNARY_SIGN = 4;
+    Blockly.Python.ORDER_MULTIPLICATIVE = 5;
+    Blockly.Python.ORDER_ADDITIVE = 6;
+    Blockly.Python.ORDER_BITWISE_SHIFT = 7;
+    Blockly.Python.ORDER_BITWISE_AND = 8;
+    Blockly.Python.ORDER_BITWISE_XOR = 9;
+    Blockly.Python.ORDER_BITWISE_OR = 10;
+    Blockly.Python.ORDER_RELATIONAL = 11;
+    Blockly.Python.ORDER_LOGICAL_NOT = 12;
+    Blockly.Python.ORDER_LOGICAL_AND = 13;
+    Blockly.Python.ORDER_LOGICAL_OR = 14;
+    Blockly.Python.ORDER_CONDITIONAL = 15;
+    Blockly.Python.ORDER_ASSIGNMENT = 16;
+    Blockly.Python.ORDER_NONE = 99;
+
+    // More complete init/finish/scrub functions are defined below with the other Python generators.
+
+    //======================================================================
+    // 実行履歴管理機能
+    //======================================================================
+    /*
+     * 深いオブジェクトのコピーを作成する（循環参照に対応）
+     * @param {*} obj コピーするオブジェクト
+     * @param {WeakMap} visited 循環参照検出用のマップ
+     * @returns {*} コピーされたオブジェクト
+     */
+    function deepClone(obj, visited = new WeakMap()) {
+        if (obj === null || typeof obj !== "object") return obj;
+        if (obj instanceof Date) return new Date(obj.getTime());
+        if (obj instanceof RegExp) return new RegExp(obj);
+
+        // 循環参照の検出と処理
+        if (visited.has(obj)) {
+            return visited.get(obj);
+        }
+
+        if (obj instanceof Array) {
+            const clonedArray = [];
+            visited.set(obj, clonedArray);
+            for (let i = 0; i < obj.length; i++) {
+                clonedArray[i] = deepClone(obj[i], visited);
+            }
+            return clonedArray;
+        }
+
+        if (typeof obj === "object") {
+            const cloned = Object.create(Object.getPrototypeOf(obj));
+            visited.set(obj, cloned);
+
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    try {
+                        cloned[key] = deepClone(obj[key], visited);
+                    } catch (e) {
+                        // コピーできないプロパティはスキップ（例：関数など）
+                        console.warn(`プロパティ ${key} のクローンに失敗:`, e);
+                    }
+                }
+            }
+
+            return cloned;
+        }
+
+        return obj;
+    }/**
+     * 現在の実行状態のスナップショットを作成する
+     * @returns {Object} 実行状態のスナップショット
+     */
+    function captureExecutionSnapshot() {
+        if (!myInterpreter) return;
+
+        const snapshot = {
+            state: deepClone(myInterpreter.stateStack),
+            stepNumber: executionHistory.stepCounter,
+            interpreterStepCount: executionHistory.interpreterStepCounter,
+            highlightedBlockId: currentHighlightedBlockId,
+            outputHtml: document.getElementById('outputDiv').innerHTML,
+            debugVars: deepClone(window.debugVars)
+        };
+
+        // インタプリタの詳細な状態を保存
+        try {
+            if (myInterpreter.stateStack_) {
+                snapshot.stateStackLength = myInterpreter.stateStack_.length;
+                snapshot.hasState = true;
+                snapshot.isCompleted = myInterpreter.stateStack_.length === 0;
+
+                // 実行状態のディープコピーを作成
+                if (myInterpreter.stateStack_.length > 0) {
+                    snapshot.interpreterState = {
+                        stateStack: deepClone(myInterpreter.stateStack_),
+                        globalScope: captureInterpreterScope(myInterpreter.global),
+                        value: myInterpreter.value,
+                        done: myInterpreter.done_
+                    };
+                }
+            } else {
+                snapshot.hasState = false;
+                snapshot.isCompleted = true;
+            }
+
+            // 生成されたJavaScriptコードを保存（再実行用）
+            if (workspace) {
+                snapshot.codeGenerated = Blockly.JavaScript.workspaceToCode(workspace);
+            }
+
+            // グローバルスコープの変数を保存
+            snapshot.globalScope = captureGlobalScope();
+        } catch (e) {
+            console.warn("インタプリタ状態のキャプチャで警告:", e);
+            snapshot.hasState = false;
+            snapshot.isCompleted = false;
+        }
+
+        return snapshot;
+    }            /**
+     * インタプリタのグローバルスコープの状態をキャプチャする
+     * @returns {Object} グローバルスコープの状態
+     */
+    function captureGlobalScope() {
+        if (!myInterpreter || !myInterpreter.global) return {};
+
+        const scope = {};
+        const globalProps = myInterpreter.global.properties;
+
+        for (const prop in globalProps) {
+            if (globalProps.hasOwnProperty(prop)) {
+                const value = globalProps[prop];
+                try {
+                    // プリミティブ値や配列のみを保存
+                    const nativeValue = myInterpreter.pseudoToNative(value);
+                    if (typeof nativeValue !== 'function') {
+                        scope[prop] = nativeValue;
+                    }
+                } catch (e) {
+                    // 変換できない値はスキップ
+                }
+            }
+        }
+        return scope;
+    }
+
+    /**
+     * インタープリターのスコープを詳細にキャプチャする（実行状態復元用）
+     * @param {Object} scope キャプチャするスコープオブジェクト
+     * @returns {Object} キャプチャされたスコープデータ
+     */
+    function captureInterpreterScope(scope) {
+        if (!scope) return null;
+
+        try {
+            const capturedScope = {
+                properties: {},
+                proto: scope.proto,
+                isObject: scope.isObject,
+                class: scope.class,
+                data: scope.data
+            };
+
+            // プロパティをディープコピー
+            if (scope.properties) {
+                for (const prop in scope.properties) {
+                    if (scope.properties.hasOwnProperty(prop)) {
+                        const value = scope.properties[prop];
+                        try {
+                            // オブジェクトの参照情報を保持してコピー
+                            capturedScope.properties[prop] = deepClone(value);
+                        } catch (e) {
+                            console.warn(`プロパティ ${prop} のキャプチャに失敗:`, e);
+                        }
+                    }
+                }
+            }
+
+            return capturedScope;
+        } catch (e) {
+            console.warn("スコープキャプチャエラー:", e);
+            return null;
+        }
+    }
+
+    /**
+     * 実行履歴にスナップショットを保存する
+     */
+    function saveExecutionSnapshot() {
+        // スナップショット取得前に出力内容を確実に反映させる
+        flushOutputImmediately();
+        const snapshot = captureExecutionSnapshot();
+        if (!snapshot) return;
+
+        // 現在位置より後の履歴を削除（新しい分岐の開始）
+        if (executionHistory.currentIndex < executionHistory.snapshots.length - 1) {
+            executionHistory.snapshots = executionHistory.snapshots.slice(0, executionHistory.currentIndex + 1);
+        }
+
+        // 新しいスナップショットを追加
+        executionHistory.snapshots.push(snapshot);
+        executionHistory.currentIndex = executionHistory.snapshots.length - 1;
+
+        // 履歴サイズの制限
+        if (executionHistory.snapshots.length > executionHistory.maxHistorySize) {
+            const removeCount = executionHistory.snapshots.length - executionHistory.maxHistorySize;
+            executionHistory.snapshots.splice(0, removeCount);
+            executionHistory.currentIndex -= removeCount;
+            if (executionHistory.currentIndex < 0) executionHistory.currentIndex = 0;
+        }
+
+        // UI更新
+        updateStepCounter();
+        updateStepBackButton();
+    }
+
+/**
+ * 指定されたスナップショットに実行状態を復元する
+ * @param {Object} snapshot 復元するスナップショット
+ */        function restoreExecutionSnapshot(snapshot) {
+        if (!snapshot) return;
+
+        try {
+            // DOM復元前に保留中の出力を破棄して表示崩れを防ぐ
+            resetOutputBuffer();
+            window.debugVars = deepClone(snapshot.debugVars);
+            document.getElementById('outputDiv').innerHTML = snapshot.outputHtml;
+
+            updateStateDisplayVisual();
+            updateStepCounter();
+            updateStepBackButton();
+
+            const outputDiv = document.getElementById('outputDiv');
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+
+        } catch (e) {
+            console.error("スナップショット復元エラー:", e);
+            displayOutput("実行状態の復元に失敗しました: " + e.message, true);
+        }
+    }
+
+    /**
+     * グローバルスコープの状態を復元する
+     * @param {Object} scopeData 復元するスコープデータ
+     */
+    function restoreGlobalScope(scopeData) {
+        if (!myInterpreter || !myInterpreter.global || !scopeData) return;
+
+        const globalProps = myInterpreter.global.properties;
+
+        for (const prop in scopeData) {
+            if (scopeData.hasOwnProperty(prop)) {
+                try {
+                    const nativeValue = scopeData[prop];
+                    const pseudoValue = myInterpreter.nativeToPseudo(nativeValue);
+                    globalProps[prop] = pseudoValue;
+                } catch (e) {
+                    console.warn(`変数 ${prop} の復元に失敗:`, e);
+                }
+            }
+        }
+    }
+
+    /**
+     * ステップカウンターの表示を更新する
+     */
+    function updateStepCounter() {
+        const counterDiv = document.getElementById('stepCounterDiv');
+        if (counterDiv) {
+            counterDiv.textContent = `ステップ: ${executionHistory.stepCounter}`;
+        }
+    }
+
+    /**
+     * 戻るボタンの有効/無効状態を更新する
+     */
+    function updateStepBackButton() {
+        const backButton = document.getElementById('stepBackButton');
+        if (backButton) {
+            backButton.disabled = executionHistory.currentIndex <= 0;
+        }
+    }            /**
+     * 1ステップ前に戻る
+     */
+    function stepBack() {
+        if (executionHistory.currentIndex <= 0) {
+            displayOutput("これ以上戻れません。", false);
+            return;
+        }
+
+        executionHistory.currentIndex--;
+        const snapshot = executionHistory.snapshots[executionHistory.currentIndex];
+
+        if (snapshot) {
+            try {
+                console.log(`--- Step Back 開始 (index: ${executionHistory.currentIndex}) ---`);
+                console.log("復元するスナップショット:", snapshot);
+                console.log("スナップショットの interpreterStepCount:", snapshot.interpreterStepCount);
+
+                // 状態を復元
+                restoreInterpreterState(snapshot);
+                restoreExecutionSnapshot(snapshot);
+
+                // interpreterStepCounter もスナップショットから復元
+                executionHistory.interpreterStepCounter = snapshot.interpreterStepCount || 0;
+                // stepCounter もスナップショットから復元
+                executionHistory.stepCounter = snapshot.stepNumber || 0;
+                console.log(`復元後の interpreterStepCounter: ${executionHistory.interpreterStepCounter}`);
+                console.log(`復元後の stepCounter: ${executionHistory.stepCounter}`);
+
+
+                console.log("--- Step Back 完了 ---");
+
+            } catch (e) {
+                console.error("ステップバックエラー:", e);
+                displayOutput("ステップバック中にエラーが発生しました: " + e.message, true);
+            }
+        }
+    }            /*
+     * インタープリターの実行状態を復元する
+     * @param {Object} snapshot 復元するスナップショット
+     */
+    function restoreInterpreterState(snapshot) {
+        console.log("restoreInterpreterState: 開始", { snapshot });
+        if (!snapshot.interpreterState || !snapshot.codeGenerated) {
+            console.warn("インタープリター状態の復元に必要なデータが不足しています。フォールバックします。");
+            // ステップ数による復元を試行
+            restoreByStepCount(snapshot);
+            return;
+        }
+
+        try {
+            console.log("restoreInterpreterState: 新しいインタープリターを作成し、状態を復元します。");
+            // 新しいインタープリターを作成
+            const newInterpreter = new Interpreter(snapshot.codeGenerated, initInterpreter);
+
+            // 保存された状態を復元
+            if (snapshot.interpreterState.stateStack) {
+                newInterpreter.stateStack_ = deepClone(snapshot.interpreterState.stateStack);
+            }
+
+            if (snapshot.interpreterState.globalScope) {
+                restoreInterpreterScope(newInterpreter.global, snapshot.interpreterState.globalScope);
+            }
+
+            // その他の状態を復元
+            newInterpreter.value = snapshot.interpreterState.value;
+            newInterpreter.done_ = snapshot.interpreterState.done;
+
+            // インタープリターを設定
+            myInterpreter = newInterpreter;
+
+            console.log("インタープリター状態の復元が完了しました");
+
+        } catch (e) {
+            console.error("インタープリター状態復元エラー:", e);
+
+            // フォールバック: ステップ数による復元を試行
+            console.log("フォールバック: ステップ数による復元を試行します");
+            restoreByStepCount(snapshot);
+        }
+    }
+
+    /*
+     * ステップ数による復元を行う（フォールバック方式）
+     * @param {Object} snapshot 復元するスナップショット
+     */
+    function restoreByStepCount(snapshot) {
+        console.log("restoreByStepCount: 開始", { snapshot });
+        try {
+            // 新しいインタープリターを作成
+            myInterpreter = null;
+            if (!prepareInterpreter()) {
+                console.error("フォールバック復元: インタープリター作成に失敗");
+                return;
+            }
+            // 目標ステップ数まで高速実行
+            const targetSteps = snapshot.interpreterStepCount || 0;
+            console.log(`restoreByStepCount: 目標ステップ数 = ${targetSteps}`);
+            if (targetSteps > 0) {
+                console.log(`フォールバック復元: インタプリタステップ ${targetSteps} まで高速実行中...`);
+
+                // ブレークポイントを無視して高速実行
+                const originalIgnoreBreakpoints = ignoreBreakpoints;
+                ignoreBreakpoints = true;
+
+                const restored = fastForwardToStep(targetSteps);
+
+                ignoreBreakpoints = originalIgnoreBreakpoints;
+
+                console.log(`fastForwardToStep result: ${restored}, interpreter state: ${myInterpreter ? 'exists' : 'null'}, done: ${myInterpreter ? myInterpreter.done : 'N/A'}`);
+
+                // fastForwardToStepがfalseを返しても、プログラムが完了していれば成功とみなす
+                if (restored || (myInterpreter && myInterpreter.done)) {
+                    console.log(`restoreByStepCount: 成功。現在のステップ数: ${executionHistory.interpreterStepCounter}, 完了状態: ${myInterpreter ? myInterpreter.done : 'N/A'}`);
+                } else {
+                    console.error("restoreByStepCount: fastForwardToStep が失敗しました。");
+                    myInterpreter = null;
+                }
+            } else {
+                console.log("restoreByStepCount: 目標ステップが0なので、実行はスキップされました。");
+            }
+
+        } catch (e) {
+            console.error("フォールバック復元エラー:", e);
+            myInterpreter = null;
+        }
+    }
+
+    /**
+     * インタープリターのスコープを復元する
+     * @param {Object} targetScope 復元先のスコープ
+     * @param {Object} sourceScope 復元元のスコープデータ
+     */
+    function restoreInterpreterScope(targetScope, sourceScope) {
+        if (!targetScope || !sourceScope) return;
+
+        try {
+            // プロパティを復元
+            if (sourceScope.properties) {
+                for (const prop in sourceScope.properties) {
+                    if (sourceScope.properties.hasOwnProperty(prop)) {
+                        targetScope.properties[prop] = deepClone(sourceScope.properties[prop]);
+                    }
+                }
+            }
+
+            // その他の属性を復元
+            if (sourceScope.proto !== undefined) targetScope.proto = sourceScope.proto;
+            if (sourceScope.isObject !== undefined) targetScope.isObject = sourceScope.isObject;
+            if (sourceScope.class !== undefined) targetScope.class = sourceScope.class;
+            if (sourceScope.data !== undefined) targetScope.data = sourceScope.data;
+
+        } catch (e) {
+            console.warn("スコープ復元エラー:", e);
+        }
+    }
+
+    /**
+     * 実行履歴をクリアする
+     */
+    function clearExecutionHistory() {
+        executionHistory.snapshots = [];
+        executionHistory.currentIndex = -1;
+        executionHistory.stepCounter = 0;
+        executionHistory.interpreterStepCounter = 0; // カウンターをリセット
+        updateStepCounter();
+        updateStepBackButton();
+    }
+
+    //======================================================================
+    // ユーティリティ関数
+    //======================================================================
+    /**
+     * 外部入力を受け取るためのプロンプトを表示する
+     * @param {string} msg プロンプトに表示するメッセージ
+     * @returns {string} 入力された値。キャンセルまたは空の場合は "0" を返す。
+     */
+
+    /**
+     * インタプリタ内の変数の値を `window.debugVars` に記録する
+     * @param {string} varName 変数名
+     * @param {*} value 値
+     */
+    window.nativeLog = function (varName, value) {
+        window.debugVars[varName] = value;
+    };
+
+    /**
+     * [FIX] パフォーマンス改善のため、出力をバッファリングし、requestAnimationFrameでまとめてDOMに書き込む
+     */
+    function flushOutput() {
+        // 呼び出し時点で保留中のアニメーションフレームは無効化される
+        outputFlushRequestId = null;
+        if (outputBuffer.length === 0) {
+            isFlushScheduled = false;
+            return;
+        }
+
+        const outputDiv = document.getElementById('outputDiv');
+        const fragment = document.createDocumentFragment();
+
+        // バッファの内容を一度に処理
+        const htmlString = outputBuffer.join('');
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlString;
+
+        while (tempDiv.firstChild) {
+            fragment.appendChild(tempDiv.firstChild);
+        }
+
+        outputDiv.appendChild(fragment);
+        outputDiv.scrollTop = outputDiv.scrollHeight;
+
+        // バッファをクリアし、フラグをリセット
+        outputBuffer = [];
+        isFlushScheduled = false;
+    }
+
+    function displayOutput(text, isError = false, addNewline = true) {
+        let content = '';
+        if (isError) {
+            content = `<div class="error-output">${text}</div>`;
+        } else {
+             if (typeof text === 'string' && text.trim().startsWith('<div')) {
+                content = text;
+            } else {
+                content = text.toString();
+            }
+            if (addNewline) {
+                content += '<br>';
+            }
+        }
+        outputBuffer.push(content);
+
+        if (!isFlushScheduled) {
+            isFlushScheduled = true;
+            outputFlushRequestId = requestAnimationFrame(flushOutput);
+        }
+    }
+
+    /**
+     * バッファに溜まっている出力を即座にDOMへ反映させる
+     */
+    function flushOutputImmediately() {
+        if (outputFlushRequestId !== null) {
+            cancelAnimationFrame(outputFlushRequestId);
+            outputFlushRequestId = null;
+        }
+        flushOutput();
+    }
+
+    /**
+     * 保留中の出力フラッシュ要求を破棄し、バッファをクリアする
+     */
+    function resetOutputBuffer() {
+        if (outputFlushRequestId !== null) {
+            cancelAnimationFrame(outputFlushRequestId);
+            outputFlushRequestId = null;
+        }
+        outputBuffer = [];
+        isFlushScheduled = false;
+    }
+
+    /**
+     * 数値を2進数で出力パネルに表示する
+     * @param {number} num 変換する数値
+     */
+    function displayBinary(num) {
+        const bin = Number(num).toString(2);
+        displayOutput(bin);
+    }
+
+    /**
+     * ヘッダーの実行ステータスを更新する
+     * @param {string} message 表示メッセージ
+     * @param {string} statusClass 'status-success' or 'status-error'
+     */
+    function setRunStatus(message, statusClass = '') {
+        const statusDiv = document.getElementById('runStatusDiv');
+        statusDiv.textContent = message;
+        statusDiv.className = 'runStatusDiv'; // クラスをリセット
+        if (statusClass) {
+            statusDiv.classList.add(statusClass);
+        }
+    }
+
+    //======================================================================
+    // 安全な配列アクセス (1-basedインデックス対応)
+    //======================================================================
+    /**
+     * 1次元配列の要素に安全にアクセスする
+     * @param {Array} arr 配列
+     * @param {number} idx インデックス
+     * @returns {*} 配列の要素
+     */
+    function safeArrayAccess(arr, idx) {
+        const nativeArr = myInterpreter ? myInterpreter.pseudoToNative(arr) : arr;
+        const originalIdx = idx;
+        if (oneBasedMode) { idx = idx - 1; }
+
+        if (!Array.isArray(nativeArr)) {
+            const msg = `エラー: ${nativeArr} は配列ではありません。`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        if (idx < 0 || idx >= nativeArr.length) {
+            const msg = `エラー: 配列の範囲外アクセス (インデックス: ${originalIdx})`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        return nativeArr[idx];
+    }
+
+    /**
+     * 2次元配列の要素に安全にアクセスする
+     * @param {Array<Array>} arr 2次元配列
+     * @param {number} i 1次元目のインデックス
+     * @param {number} j 2次元目のインデックス
+     * @returns {*} 配列の要素
+     */
+    function safeArrayAccess2d(arr, i, j) {
+        const nativeArr = myInterpreter ? myInterpreter.pseudoToNative(arr) : arr;
+        const originalI = i, originalJ = j;
+        if (oneBasedMode) { i = i - 1; j = j - 1; }
+
+        if (!Array.isArray(nativeArr)) {
+            const msg = `エラー: ${nativeArr} は2次元配列ではありません。`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        if (i < 0 || i >= nativeArr.length) {
+            const msg = `エラー: 2次元配列の1次元目の範囲外 (インデックス: ${originalI})`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        if (!Array.isArray(nativeArr[i])) {
+            const msg = `エラー: ${nativeArr[i]} は配列ではありません。`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        if (j < 0 || j >= nativeArr[i].length) {
+            const msg = `エラー: 2次元配列の2次元目の範囲外 (インデックス: ${originalJ})`;
+            displayOutput(msg, true);
+            throw new Error(msg);
+        }
+        return nativeArr[i][j];
+    }
+
+    //======================================================================
+    // Blockly ブロック定義とJavaScriptコード生成
+    //======================================================================
+    // --- ブロックの見た目を定義 (JSON) ---
+    window.BLOCK_DEFINITIONS = [
+        { "type": "math_free_input", "message0": "数式 %1", "args0": [{ "type": "field_input", "name": "MATH_INPUT", "text": "3*2-1*i" }], "output": null, "colour": 230, "tooltip": "数式を自由入力します" },
+        { "type": "assignment", "message0": "%1 = %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数に値を代入する" },
+        { "type": "number_literal", "message0": "%1", "args0": [{ "type": "field_number", "name": "NUM", "value": 0 }], "output": "Number", "colour": 230, "tooltip": "数値を入力する" },
+        { "type": "string_literal", "message0": "\"%1\"", "args0": [{ "type": "field_input", "name": "TEXT", "text": "テキスト" }], "output": "String", "colour": 230, "tooltip": "文字列を入力する" },
+        { "type": "external_input", "message0": "外部入力 (%1)", "args0": [{ "type": "field_dropdown", "name": "TYPE", "options": [["文字列", "STRING"], ["数値", "NUMBER"]] }], "output": null, "colour": 160, "tooltip": "ユーザーからの入力を受け取る" },
+        { "type": "variable_access", "message0": "変数 %1", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }], "output": null, "colour": 230, "tooltip": "変数の値を取得する" },
+        { "type": "array_assignment_1d", "message0": "%1 [ %2 ] = %3", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "1次元配列の要素に値を代入する" },
+        { "type": "array_assignment_2d", "message0": "%1 [ %2, %3 ] = %4", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }, { "type": "input_value", "name": "VALUE" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列の要素に値を代入する" },
+        { "type": "array_assignment_full", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "87,45,72,100" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "配列全体に値を代入する" },
+        { "type": "array_assignment_full_2d", "message0": "%1 = { %2 }", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "field_input", "name": "ELEMENTS", "text": "1,2;3,4" }], "previousStatement": null, "nextStatement": null, "colour": 260, "tooltip": "2次元配列全体に値を代入する（行はセミコロン、要素はカンマ区切り）" },
+        { "type": "array_access_1d", "message0": "%1 [ %2 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Hairetsu" }, { "type": "input_value", "name": "INDEX", "check": "Number" }], "output": null, "colour": 260, "tooltip": "1次元配列の要素を参照する" },
+        { "type": "array_access_2d", "message0": "%1 [ %2, %3 ]", "args0": [{ "type": "field_input", "name": "ARRAY", "text": "Gyoretsu" }, { "type": "input_value", "name": "INDEX1", "check": "Number" }, { "type": "input_value", "name": "INDEX2", "check": "Number" }], "output": null, "colour": 260, "tooltip": "2次元配列の要素を参照する" },
+        { "type": "array_length", "message0": "要素数(%1)", "args0": [{ "type": "input_value", "name": "ARRAY", "check": ["Array", "String"] }], "output": "Number", "colour": 260, "tooltip": "配列の要素数を返します" },
+        { "type": "arithmetic", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Number" }, { "type": "field_dropdown", "name": "OP", "options": [["+", "+"], ["-", "-"], ["*", "*"], ["/", "/"], ["÷", "÷"], ["%", "%"], ["**", "**"]] }, { "type": "input_value", "name": "B", "check": "Number" }], "inputsInline": true, "output": "Number", "colour": 230, "tooltip": "算術演算" },
+        // [FIX] 比較演算子の表示を変更し、インライン表示を明示
+        { "type": "comparison", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A" }, { "type": "field_dropdown", "name": "OP", "options": [["==", "==="], ["!=", "!=="], [">", ">"], [">=", ">="], ["<", "<"], ["<=", "<="]] }, { "type": "input_value", "name": "B" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "比較演算子" },
+        // [FIX] 論理演算子にインライン表示を明示
+        { "type": "logic_operation_jp", "message0": "%1 %2 %3", "args0": [{ "type": "input_value", "name": "A", "check": "Boolean" }, { "type": "field_dropdown", "name": "OP", "options": [["and", "&&"], ["or", "||"]] }, { "type": "input_value", "name": "B", "check": "Boolean" }], "inputsInline": true, "output": "Boolean", "colour": 210, "tooltip": "論理演算子（and/or）" },
+        { "type": "logic_negate_jp", "message0": "not %1", "args0": [{ "type": "input_value", "name": "BOOL", "check": "Boolean" }], "output": "Boolean", "colour": 210, "tooltip": "論理否定" },
+        { "type": "boolean_literal", "message0": "%1", "args0": [{ "type": "field_dropdown", "name": "BOOL", "options": [["True", "TRUE"], ["False", "FALSE"]] }], "output": "Boolean", "colour": 210, "tooltip": "真偽値" },
+        { "type": "if_statement", "message0": "もし %1 ならば\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if文" },
+        { "type": "if_else_statement", "message0": "もし %1 ならば\n%2\nそうでなければ\n%3", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO0" }, { "type": "input_statement", "name": "ELSE" }], "previousStatement": null, "nextStatement": null, "colour": 210, "tooltip": "if-else文" },
+        { "type": "while_loop", "message0": "%1 の間、繰り返す\n%2", "args0": [{ "type": "input_value", "name": "CONDITION", "check": "Boolean" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "whileループ" },
+        { "type": "do_while_loop", "message0": "繰り返し\n%1\nを、%2 になるまで実行する", "args0": [{ "type": "input_statement", "name": "DO" }, { "type": "input_value", "name": "CONDITION", "check": "Boolean" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "後判定ループ" },
+        { "type": "for_loop", "message0": "%1 を %2 から %3 まで %4 ずつ増やしながら、繰り返す\n%5", "args0": [{ "type": "field_input", "name": "VAR", "text": "i" }, { "type": "input_value", "name": "FROM", "check": "Number" }, { "type": "input_value", "name": "TO", "check": "Number" }, { "type": "input_value", "name": "STEP", "check": "Number" }, { "type": "input_statement", "name": "DO" }], "previousStatement": null, "nextStatement": null, "colour": 120, "tooltip": "forループ" },
+        { "type": "inc_dec", "message0": "%1 を %2", "args0": [{ "type": "field_input", "name": "VAR", "text": "hensu" }, { "type": "field_dropdown", "name": "OP", "options": [["1 増やす", "+1"], ["1 減らす", "-1"]] }], "previousStatement": null, "nextStatement": null, "colour": 230, "tooltip": "変数のインクリメント/デクリメント" },
+        { "type": "square", "message0": "二乗( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "二乗を計算する" },
+        { "type": "power", "message0": "べき乗( %1, %2 )", "args0": [{ "type": "input_value", "name": "BASE", "check": "Number" }, { "type": "input_value", "name": "EXP", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "べき乗を計算する" },
+        { "type": "random", "message0": "乱数( %1, %2 )", "args0": [{ "type": "input_value", "name": "MIN", "check": "Number" }, { "type": "input_value", "name": "MAX", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "乱数を生成する" },
+        { "type": "random_float", "message0": "乱数()", "output": "Number", "colour": 230, "tooltip": "0.0以上1.0未満の小数の乱数を生成する" },
+        { "type": "random_choice", "message0": "リスト %1 からランダムに選ぶ", "args0": [{ "type": "input_value", "name": "LIST", "check": "Array" }], "output": null, "colour": 230, "tooltip": "リストからランダムに要素を1つ選ぶ" },
+        { "type": "integer_cast", "message0": "整数(%1)", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "output": "Number", "colour": 230, "tooltip": "小数を整数に変換する" },
+        { "type": "display_binary", "message0": "二進で表示する( %1 )", "args0": [{ "type": "input_value", "name": "NUM", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "数値を2進数で表示する" },
+        { "type": "simple_display", "message0": "表示する %1 %2", "args0": [{ "type": "input_value", "name": "VALUE" }, { "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": null, "nextStatement": null, "colour": 160, "tooltip": "値を表示する（改行の有無を選択）" },
+        { "type": "display", "message0": "表示項目 %1", "args0": [{ "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" },
+        { "type": "breakpoint", "message0": "ブレークポイント %1", "args0": [{ "type": "input_value", "name": "NUMBER", "check": "Number" }], "previousStatement": null, "nextStatement": null, "colour": 0, "tooltip": "指定した番号のブレークポイントで処理を一時停止する" }
+    ];
+    Blockly.defineBlocksWithJsonArray(window.BLOCK_DEFINITIONS);
+
+    // --- 「表示する」ブロックの動的な入力変化 (Mutator) のための定義 ---
+    Blockly.Blocks['display_mutator_container'] = {
+        init: function () { this.appendDummyInput().appendField("表示項目"); this.appendStatementInput("STACK"); this.setColour(160); this.setTooltip(""); this.contextMenu = false; }
+    };
+    Blockly.Blocks['display_mutator_item'] = {
+        init: function () { this.appendDummyInput().appendField("項目"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour(160); this.setTooltip(""); this.contextMenu = false; }
+    };
+    const displayMutator = {
+        mutationToDom: function () { const container = document.createElement('mutation'); container.setAttribute('items', this.itemCount_); return container; },
+        domToMutation: function (xmlElement) { this.itemCount_ = parseInt(xmlElement.getAttribute('items'), 10) || 0; this.updateShape_(); },
+        decompose: function (workspace) { const containerBlock = workspace.newBlock('display_mutator_container'); containerBlock.initSvg(); let connection = containerBlock.getInput('STACK').connection; for (let i = 0; i < this.itemCount_; i++) { const itemBlock = workspace.newBlock('display_mutator_item'); itemBlock.initSvg(); connection.connect(itemBlock.previousConnection); connection = itemBlock.nextConnection; } return containerBlock; },
+        compose: function (containerBlock) { let itemBlock = containerBlock.getInputTargetBlock('STACK'); const connections = []; while (itemBlock) { connections.push(itemBlock.valueConnection_); itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock(); } for (let i = 0; i < this.itemCount_; i++) { const connection = this.getInput('ADD' + i)?.connection.targetConnection; if (connection && connections.indexOf(connection) == -1) { connection.disconnect(); } } this.itemCount_ = connections.length; this.updateShape_(); for (let i = 0; i < this.itemCount_; i++) { if (connections[i]) { this.getInput('ADD' + i).connection.connect(connections[i]); } } },
+        saveConnections: function (containerBlock) { let itemBlock = containerBlock.getInputTargetBlock('STACK'); let i = 0; while (itemBlock) { const input = this.getInput('ADD' + i); itemBlock.valueConnection_ = input && input.connection.targetConnection; i++; itemBlock = itemBlock.nextConnection && itemBlock.nextConnection.targetBlock(); } }
+    };
+    Blockly.Extensions.registerMutator('display_mutator', displayMutator, function () { this.itemCount_ = 1; this.updateShape_(); }, ['display_mutator_item']);
+    Blockly.Blocks['display'] = {
+        init: function () { this.jsonInit({ "message0": "表示項目 %1", "args0": [{ "type": "field_dropdown", "name": "NEWLINE", "options": [["改行あり", "TRUE"], ["改行なし", "FALSE"]] }], "previousStatement": true, "nextStatement": true, "colour": 160, "tooltip": "複数の値を連結して表示する", "mutator": "display_mutator" }); },
+        updateShape_: function () { for (let i = 0; this.getInput('ADD' + i); i++) { this.removeInput('ADD' + i); } if (this.getInput('END')) this.removeInput('END'); if (this.getInput('EMPTY')) this.removeInput('EMPTY'); if (this.itemCount_ == 0) { this.appendDummyInput('EMPTY'); } else { for (let i = 0; i < this.itemCount_; i++) { const input = this.appendValueInput('ADD' + i); if (i > 0) { input.appendField("と"); } } } }
+    };
+
+    // --- ブロックからJavaScriptコードを生成するロジック ---
+    Blockly.JavaScript['assignment'] = function (block) { const varName = block.getFieldValue('VAR'); const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; return `${varName} = ${value};\nnativeLog('${varName}', ${varName});\n`; };
+    Blockly.JavaScript['number_literal'] = (block) => [String(block.getFieldValue('NUM')), ORDER_ATOMIC];
+    Blockly.JavaScript['string_literal'] = (block) => [JSON.stringify(block.getFieldValue('TEXT')), ORDER_ATOMIC];
+    Blockly.JavaScript['external_input'] = function (block) { const type = block.getFieldValue('TYPE'); const code = "myPrompt('外部からの入力')"; if (type === 'NUMBER') { return [`Number(${code})`, ORDER_FUNCTION_CALL]; } else { return [`${code}`, ORDER_FUNCTION_CALL]; } };
+    Blockly.JavaScript['variable_access'] = (block) => [block.getFieldValue('VAR'), ORDER_ATOMIC];
+    Blockly.JavaScript['array_assignment_1d'] = function (block) { const arr = block.getFieldValue('ARRAY'); let idx = Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'; const val = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; let code = `${arr}[${oneBasedMode ? `(${idx} - 1)` : idx}] = ${val};\n`; code += `nativeLog('${arr}', ${arr});\n`; return code; };
+    Blockly.JavaScript['array_assignment_2d'] = function (block) { const arr = block.getFieldValue('ARRAY'); let i = Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'; let j = Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'; const val = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_ASSIGNMENT) || '0'; const index1 = oneBasedMode ? `(${i} - 1)` : i; const index2 = oneBasedMode ? `(${j} - 1)` : j; let code = `${arr}[${index1}][${index2}] = ${val};\n`; code += `nativeLog('${arr}', ${arr});\n`; return code; };
+    Blockly.JavaScript['array_assignment_full'] = function (block) { const arr = block.getFieldValue('ARRAY'); const elements = block.getFieldValue('ELEMENTS'); const splitted = elements.replace(/[{}]/g, '').split(',').map(s => { const trimmed = s.trim(); return isNaN(Number(trimmed)) ? JSON.stringify(trimmed) : Number(trimmed); }); return `${arr} = [${splitted.join(', ')}];\nnativeLog('${arr}', ${arr});\n`; };
+    Blockly.JavaScript['array_assignment_full_2d'] = function (block) { const arr = block.getFieldValue('ARRAY'); const elementsText = block.getFieldValue('ELEMENTS') || ''; const rows = elementsText.split(';').map(rowText => { const elements = rowText.split(',').map(e => { const trimmed = e.trim(); return isNaN(Number(trimmed)) ? JSON.stringify(trimmed) : Number(trimmed); }); return `[${elements.join(',')}]`; }); return `${arr} = [${rows.join(',')}];\nnativeLog('${arr}', ${arr});\n`; };
+    Blockly.JavaScript['array_access_1d'] = (block) => [`safeArrayAccess(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['array_access_2d'] = (block) => [`safeArrayAccess2d(${block.getFieldValue('ARRAY')}, ${Blockly.JavaScript.valueToCode(block, 'INDEX1', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'INDEX2', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['array_length'] = function(block) { const array = Blockly.JavaScript.valueToCode(block, 'ARRAY', ORDER_MEMBER) || '[]'; return [array + '.length', ORDER_MEMBER]; };
+    Blockly.JavaScript['arithmetic'] = function (block) { const op = block.getFieldValue('OP'); if (op === '÷') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.floor(${a} / ${b})`, ORDER_FUNCTION_CALL]; } if (op === '**') { const a = Blockly.JavaScript.valueToCode(block, 'A', ORDER_NONE) || '0'; const b = Blockly.JavaScript.valueToCode(block, 'B', ORDER_NONE) || '0'; return [`Math.pow(${a}, ${b})`, ORDER_FUNCTION_CALL]; } const OPERATORS = { '+': [' + ', ORDER_ADDITION], '-': [' - ', ORDER_SUBTRACTION], '*': [' * ', ORDER_MULTIPLICATION], '/': [' / ', ORDER_DIVISION], '%': [' % ', ORDER_MODULUS], }; const tuple = OPERATORS[op]; const operator = tuple[0]; const order = tuple[1]; const argument0 = Blockly.JavaScript.valueToCode(block, 'A', order) || '0'; const argument1 = Blockly.JavaScript.valueToCode(block, 'B', order) || '0'; const code = argument0 + operator + argument1; return [code, order]; };
+    Blockly.JavaScript['comparison'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'A', ORDER_RELATIONAL) || '0'} ${block.getFieldValue('OP')} ${Blockly.JavaScript.valueToCode(block, 'B', ORDER_RELATIONAL) || '0'})`, ORDER_RELATIONAL];
+    Blockly.JavaScript['logic_operation_jp'] = (block) => { const op = block.getFieldValue('OP'); const order = op === '&&' ? ORDER_LOGICAL_AND : ORDER_LOGICAL_OR; return [`(${Blockly.JavaScript.valueToCode(block, 'A', order) || 'false'} ${op} ${Blockly.JavaScript.valueToCode(block, 'B', order) || 'false'})`, order]; };
+    Blockly.JavaScript['logic_negate_jp'] = (block) => [`(!${Blockly.JavaScript.valueToCode(block, 'BOOL', ORDER_LOGICAL_NOT) || 'false'})`, ORDER_LOGICAL_NOT];
+    Blockly.JavaScript['boolean_literal'] = (block) => [block.getFieldValue('BOOL') === 'TRUE' ? 'true' : 'false', ORDER_ATOMIC];
+    Blockly.JavaScript['if_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
+    Blockly.JavaScript['if_else_statement'] = (block) => `if (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO0')}} else {\n${Blockly.JavaScript.statementToCode(block, 'ELSE')}}\n`;
+    Blockly.JavaScript['while_loop'] = (block) => `while (${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}) {\n${Blockly.JavaScript.statementToCode(block, 'DO')}}\n`;
+    Blockly.JavaScript['do_while_loop'] = (block) => `do {\n${Blockly.JavaScript.statementToCode(block, 'DO')}} while (!(${Blockly.JavaScript.valueToCode(block, 'CONDITION', ORDER_NONE) || 'false'}));\n`;
+    Blockly.JavaScript['for_loop'] = function (block) { const varName = block.getFieldValue('VAR'); const fromVal = Blockly.JavaScript.valueToCode(block, 'FROM', ORDER_ASSIGNMENT) || '0'; const toVal = Blockly.JavaScript.valueToCode(block, 'TO', ORDER_RELATIONAL) || '0'; const stepVal = Blockly.JavaScript.valueToCode(block, 'STEP', ORDER_ASSIGNMENT) || '1'; if (Number(stepVal) === 0) { throw new Error("「くりかえし」ブロックの「ずつ増やす」の値に0は指定できません。"); } const branch = Blockly.JavaScript.statementToCode(block, 'DO'); let operator = '<='; const stepBlock = block.getInputTargetBlock('STEP'); if (stepBlock && stepBlock.type === 'number_literal') { const stepNum = Number(stepBlock.getFieldValue('NUM')); if (stepNum < 0) { operator = '>='; } } else if (stepVal.trim().startsWith('-')) { operator = '>='; } const loopCode = `for (${varName} = ${fromVal}; ${varName} ${operator} ${toVal}; ${varName} += ${stepVal}) {\n  nativeLog('${varName}', ${varName});\n${branch}}\n`; const finalAssignment = `${varName} = (${toVal}) + (${stepVal});\n`; const finalLog = `nativeLog('${varName}', ${varName});\n`; return loopCode + finalAssignment + finalLog; };
+    Blockly.JavaScript['inc_dec'] = (block) => { const varName = block.getFieldValue('VAR'); const op = block.getFieldValue('OP') === '+1' ? '+' : '-'; return `${varName} = (typeof ${varName} === 'undefined' ? 0 : ${varName}) ${op} 1;\nnativeLog('${varName}', ${varName});\n`; };
+    Blockly.JavaScript['square'] = (block) => [`(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'} * ${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_MULTIPLICATION];
+    Blockly.JavaScript['power'] = (block) => [`Math.pow(${Blockly.JavaScript.valueToCode(block, 'BASE', ORDER_NONE) || '0'}, ${Blockly.JavaScript.valueToCode(block, 'EXP', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['random'] = (block) => [`(Math.floor(Math.random() * ((${Blockly.JavaScript.valueToCode(block, 'MAX', ORDER_NONE) || '0'} - ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'}) + 1)) + ${Blockly.JavaScript.valueToCode(block, 'MIN', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['random_float'] = (block) => ['Math.random()', ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['random_choice'] = function(block) {
+        const list = Blockly.JavaScript.valueToCode(block, 'LIST', ORDER_MEMBER) || '[]';
+        const code = `${list}[Math.floor(Math.random() * ${list}.length)]`;
+        return [code, ORDER_FUNCTION_CALL];
+    };
+    Blockly.JavaScript['integer_cast'] = (block) => [`Math.floor(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'})`, ORDER_FUNCTION_CALL];
+    Blockly.JavaScript['display_binary'] = (block) => `displayBinary(${Blockly.JavaScript.valueToCode(block, 'NUM', ORDER_NONE) || '0'});\n`;
+    Blockly.JavaScript['simple_display'] = (block) => { const value = Blockly.JavaScript.valueToCode(block, 'VALUE', ORDER_NONE) || '""'; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${value}, false, ${newline});\n`; };
+    Blockly.JavaScript['display'] = function (block) { const parts = []; for (let i = 0; i < block.itemCount_; i++) { parts.push(Blockly.JavaScript.valueToCode(block, 'ADD' + i, ORDER_NONE) || '""'); } const text = `[${parts.join(', ')}].join('')`; const newline = block.getFieldValue('NEWLINE') === 'TRUE'; return `displayOutput(${text}, false, ${newline});\n`; };
+    Blockly.JavaScript['breakpoint'] = function (block) { const number = Blockly.JavaScript.valueToCode(block, 'NUMBER', ORDER_NONE) || 'null'; return `checkBreakpoint(${number});\n`; };
+    Blockly.JavaScript['math_free_input'] = function (block) {
+        let math_input = block.getFieldValue('MATH_INPUT');
+
+        // 2次元配列のアクセス M[i, j] を safeArrayAccess2d(M, i, j) に置換
+        math_input = math_input.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([^,]+?)\s*,\s*([^\]]+?)\s*\]/g, 'safeArrayAccess2d($1, $2, $3)');
+
+        // 1次元配列のアクセス A[i] を safeArrayAccess(A, i) に置換
+        math_input = math_input.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([^\]]+?)\s*\]/g, 'safeArrayAccess($1, $2)');
+
+        // ワークスペース上の全ての変数を取得
+        const allVariables = workspace.getAllVariables();
+        const varNames = allVariables.map(v => v.name);
+        const uniqueVarNames = [...new Set(varNames)];
+
+        // 安全な評価関数を呼び出すコードを生成
+        // IIFE（即時実行関数）を使い、変数を引数として渡すことで、安全なスコープで式を評価する
+        const code = `(function(${uniqueVarNames.join(',')}) {
+            return ${math_input};
+        })(${uniqueVarNames.join(',')})`;
+
+        return [code, ORDER_FUNCTION_CALL];
+    };
+    Blockly.Python['procedures_defreturn'] = function(block) {
+        const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+        let xfix1 = '';
+        if (Blockly.Python.STATEMENT_PREFIX) {
+            xfix1 += Blockly.Python.injectId(Blockly.Python.STATEMENT_PREFIX, block);
+        }
+        if (Blockly.Python.STATEMENT_SUFFIX) {
+            xfix1 += Blockly.Python.injectId(Blockly.Python.STATEMENT_SUFFIX, block);
+        }
+        if (xfix1) {
+            xfix1 = Blockly.Python.prefixLines(xfix1, Blockly.Python.INDENT);
+        }
+        let loopTrap = '';
+        if (Blockly.Python.INFINITE_LOOP_TRAP) {
+            loopTrap = Blockly.Python.prefixLines(Blockly.Python.injectId(Blockly.Python.INFINITE_LOOP_TRAP, block), Blockly.Python.INDENT);
+        }
+        const branch = Blockly.Python.statementToCode(block, 'STACK');
+        let returnValue = Blockly.Python.valueToCode(block, 'RETURN', Blockly.Python.ORDER_NONE) || '';
+        let xfix2 = '';
+        if (branch && returnValue) {
+            xfix2 = Blockly.Python.prefixLines(Blockly.Python.injectId(Blockly.Python.STATEMENT_SUFFIX, block), Blockly.Python.INDENT);
+        }
+        if (returnValue) {
+            returnValue = Blockly.Python.INDENT + 'return ' + returnValue + '\n';
+        } else if (!branch) {
+            returnValue = Blockly.Python.PASS;
+        }
+        const args = [];
+        const variables = block.getVars();
+        for (let i = 0; i < variables.length; i++) {
+            args[i] = Blockly.Python.variableDB_.getName(variables[i], 'VARIABLE');
+        }
+        let code = 'def ' + funcName + '(' + args.join(', ') + '):\n' + xfix1 + loopTrap + branch + xfix2 + returnValue;
+        code = Blockly.Python.scrub_(block, code);
+        Blockly.Python.definitions_['%' + funcName] = code;
+        return null;
+    };
+
+    Blockly.Python['procedures_defnoreturn'] = Blockly.Python['procedures_defreturn'];
+
+    Blockly.Python['procedures_callreturn'] = function(block) {
+        const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+        const args = [];
+        const variables = block.getVars();
+        for (let i = 0; i < variables.length; i++) {
+            args[i] = Blockly.Python.valueToCode(block, 'ARG' + i, Blockly.Python.ORDER_NONE) || 'None';
+        }
+        const code = funcName + '(' + args.join(', ') + ')';
+        return [code, Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['procedures_callnoreturn'] = function(block) {
+        const funcName = Blockly.Python.variableDB_.getName(block.getFieldValue('NAME'), 'PROCEDURE');
+        const args = [];
+        const variables = block.getVars();
+        for (let i = 0; i < variables.length; i++) {
+            args[i] = Blockly.Python.valueToCode(block, 'ARG' + i, Blockly.Python.ORDER_NONE) || 'None';
+        }
+        const code = funcName + '(' + args.join(', ') + ')\n';
+        return code;
+    };
+
+    Blockly.Python['procedures_ifreturn'] = function(block) {
+        let condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
+        let code = 'if ' + condition + ':\n';
+        if (block.hasReturnValue_) {
+            const value = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_NONE) || 'None';
+            code += Blockly.Python.INDENT + 'return ' + value + '\n';
+        } else {
+            code += Blockly.Python.INDENT + 'return\n';
+        }
+        return code;
+    };
+
+    // (このセクションはPythonジェネレータの初期化時に上書きされるため、ここではプレースホルダとしておく)
+    Blockly.Python.init = function(workspace) {
+        Blockly.Python.PASS = this.INDENT + 'pass\n';
+
+        // Create a string of reserved words for the Blockly.Names constructor.
+        const reservedWordsString = 'and,as,assert,break,class,continue,def,del,elif,else,except,finally,for,from,global,if,import,in,is,lambda,nonlocal,not,or,pass,raise,return,try,while,with,yield,print,int,float,str,list,dict,set,tuple,input,range';
+
+        // Initialize the variable DB with the reserved words string.
+        if (!Blockly.Python.variableDB_) {
+            Blockly.Python.variableDB_ = new Blockly.Names(reservedWordsString);
+        } else {
+            Blockly.Python.variableDB_.reset();
+        }
+        Blockly.Python.variableDB_.setVariableMap(workspace.getVariableMap());
+
+        // For other uses, it can be useful to have the reserved words as a set.
+        Blockly.Python.reservedWords_ = new Set(reservedWordsString.split(','));
+
+        // Initialize imports and definitions
+        Blockly.Python.imports_ = {};
+        Blockly.Python.definitions_ = {};
+    };
+
+    Blockly.Python.finish = function(code) {
+        // インポート文とヘルパー関数をコードの先頭に追加
+        const imports = Object.values(Blockly.Python.imports_).join('\n');
+        const definitions = Object.values(Blockly.Python.definitions_).join('\n\n');
+        // definitionsとcodeの間に十分な改行を入れる
+        const finalCode = (imports ? imports + '\n\n' : '') +
+                          (definitions ? definitions + '\n\n' : '') +
+                          code;
+        // クリア
+        Blockly.Python.imports_ = {};
+        Blockly.Python.definitions_ = {};
+        return finalCode;
+    };
+
+    Blockly.Python.scrub_ = function(block, code, opt_thisOnly) {
+        const nextBlock = block.nextConnection && block.nextConnection.targetBlock();
+        const nextCode = opt_thisOnly ? '' : this.blockToCode(nextBlock);
+        return code + nextCode;
+    };
+
+    Blockly.Python.provideFunction_ = function(name, codeLines) {
+        const placeholder = '%FUNCTION_NAME_PLACEHOLDER%';
+        let functionName = Blockly.Python.variableDB_.getName(name, 'PROCEDURE');
+        if (!Blockly.Python.definitions_[name]) {
+            functionName = Blockly.Python.variableDB_.getDistinctName(name, 'PROCEDURE');
+            let code = codeLines.join('\n').replace(new RegExp(placeholder, 'g'), functionName);
+            Blockly.Python.definitions_[name] = code;
+        }
+        return functionName;
+    };
+
+    Blockly.Python['assignment'] = function(block) {
+        const varName = Blockly.Python.variableDB_.getName(block.getFieldValue('VAR'), 'VARIABLE');
+        const value = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_ASSIGNMENT) || '0';
+        return `${varName} = ${value}\n`;
+    };
+
+    Blockly.Python['number_literal'] = (block) => [String(block.getFieldValue('NUM')), Blockly.Python.ORDER_ATOMIC];
+    Blockly.Python['string_literal'] = (block) => [`'${block.getFieldValue('TEXT')}'`, Blockly.Python.ORDER_ATOMIC];
+
+    Blockly.Python['external_input'] = function(block) {
+        const type = block.getFieldValue('TYPE');
+        const prompt = `input('外部からの入力')`;
+        if (type === 'NUMBER') {
+            return [`int(${prompt})`, Blockly.Python.ORDER_FUNCTION_CALL];
+        }
+        return [prompt, Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['variable_access'] = (block) => [Blockly.Python.variableDB_.getName(block.getFieldValue('VAR'), 'VARIABLE'), Blockly.Python.ORDER_ATOMIC];
+
+    Blockly.Python['array_assignment_1d'] = function(block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        let idx = Blockly.Python.valueToCode(block, 'INDEX', Blockly.Python.ORDER_NONE) || '0';
+        const val = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_ASSIGNMENT) || '0';
+        return `${arr}[${oneBasedMode ? `int(${idx}) - 1` : `int(${idx})`}] = ${val}\n`;
+    };
+
+    Blockly.Python['array_assignment_2d'] = function (block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        let i = Blockly.Python.valueToCode(block, 'INDEX1', Blockly.Python.ORDER_NONE) || '0';
+        let j = Blockly.Python.valueToCode(block, 'INDEX2', Blockly.Python.ORDER_NONE) || '0';
+        const val = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_ASSIGNMENT) || '0';
+        const i_access = oneBasedMode ? `int(${i}) - 1` : `int(${i})`;
+        const j_access = oneBasedMode ? `int(${j}) - 1` : `int(${j})`;
+        return `${arr}[${i_access}][${j_access}] = ${val}\n`;
+    };
+
+    Blockly.Python['array_assignment_full'] = function(block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        const elements = block.getFieldValue('ELEMENTS');
+        const splitted = elements.split(',').map(s => {
+            const trimmed = s.trim();
+            return isNaN(Number(trimmed)) || trimmed === '' ? `'${trimmed}'` : Number(trimmed);
+        });
+        return `${arr} = [${splitted.join(', ')}]\n`;
+    };
+
+    Blockly.Python['array_assignment_full_2d'] = function (block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        const elementsText = block.getFieldValue('ELEMENTS') || '';
+        const rows = elementsText.split(';').map(rowText => `[${rowText.trim()}]`);
+        return `${arr} = [${rows.join(', ')}]\n`;
+    };
+
+    Blockly.Python['array_access_1d'] = function(block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        let idx = Blockly.Python.valueToCode(block, 'INDEX', Blockly.Python.ORDER_NONE) || '0';
+        const idx_access = oneBasedMode ? `int(${idx}) - 1` : `int(${idx})`;
+        return [`${arr}[${idx_access}]`, Blockly.Python.ORDER_MEMBER];
+    };
+
+    Blockly.Python['array_length'] = function(block) {
+        const list = Blockly.Python.valueToCode(block, 'ARRAY', Blockly.Python.ORDER_NONE) || '[]';
+        return ['len(' + list + ')', Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['array_access_2d'] = function(block) {
+        const arr = Blockly.Python.variableDB_.getName(block.getFieldValue('ARRAY'), 'VARIABLE');
+        let i = Blockly.Python.valueToCode(block, 'INDEX1', Blockly.Python.ORDER_NONE) || '0';
+        let j = Blockly.Python.valueToCode(block, 'INDEX2', Blockly.Python.ORDER_NONE) || '0';
+        const i_access = oneBasedMode ? `int(${i}) - 1` : `int(${i})`;
+        const j_access = oneBasedMode ? `int(${j}) - 1` : `int(${j})`;
+        return [`${arr}[${i_access}][${j_access}]`, Blockly.Python.ORDER_MEMBER];
+    };
+
+    Blockly.Python['arithmetic'] = function(block) {
+        const OPERATORS = {
+            '+': [' + ', Blockly.Python.ORDER_ADDITIVE],
+            '-': [' - ', Blockly.Python.ORDER_ADDITIVE],
+            '×': [' * ', Blockly.Python.ORDER_MULTIPLICATIVE],
+            '*': [' * ', Blockly.Python.ORDER_MULTIPLICATIVE],
+            '/': [' / ', Blockly.Python.ORDER_MULTIPLICATIVE],
+            '÷': [' // ', Blockly.Python.ORDER_MULTIPLICATIVE],
+            '%': [' % ', Blockly.Python.ORDER_MULTIPLICATIVE],
+            '**': [' ** ', Blockly.Python.ORDER_EXPONENTIATION],
+        };
+        const tuple = OPERATORS[block.getFieldValue('OP')];
+        const operator = tuple[0];
+        const order = tuple[1];
+        const argument0 = Blockly.Python.valueToCode(block, 'A', order) || '0';
+        const argument1 = Blockly.Python.valueToCode(block, 'B', order) || '0';
+        return [argument0 + operator + argument1, order];
+    };
+
+    Blockly.Python['comparison'] = function(block) {
+        const OPERATORS = {
+            '===': ' == ', '==': ' == ',
+            '!==': ' != ', '!=': ' != ',
+            '<': ' < ', '<=': ' <= ',
+            '>': ' > ', '>=': ' >= '
+        };
+        const op = OPERATORS[block.getFieldValue('OP')];
+        const argument0 = Blockly.Python.valueToCode(block, 'A', Blockly.Python.ORDER_RELATIONAL) || '0';
+        const argument1 = Blockly.Python.valueToCode(block, 'B', Blockly.Python.ORDER_RELATIONAL) || '0';
+        return [`${argument0}${op}${argument1}`, Blockly.Python.ORDER_RELATIONAL];
+    };
+
+    Blockly.Python['logic_operation_jp'] = function(block) {
+        const OPERATORS = { '&&': 'and', '||': 'or' };
+        const op = OPERATORS[block.getFieldValue('OP')];
+        const order = (op === 'and') ? Blockly.Python.ORDER_LOGICAL_AND : Blockly.Python.ORDER_LOGICAL_OR;
+        const argument0 = Blockly.Python.valueToCode(block, 'A', order) || 'False';
+        const argument1 = Blockly.Python.valueToCode(block, 'B', order) || 'False';
+        return [`${argument0} ${op} ${argument1}`, order];
+    };
+
+    Blockly.Python['logic_negate_jp'] = (block) => [`not ${Blockly.Python.valueToCode(block, 'BOOL', Blockly.Python.ORDER_LOGICAL_NOT) || 'False'}`, Blockly.Python.ORDER_LOGICAL_NOT];
+
+    Blockly.Python['boolean_literal'] = (block) => [block.getFieldValue('BOOL') === 'TRUE' ? 'True' : 'False', Blockly.Python.ORDER_ATOMIC];
+
+    Blockly.Python['if_statement'] = function(block) {
+        const condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
+        const branch = Blockly.Python.statementToCode(block, 'DO') || Blockly.Python.PASS;
+        return `if ${condition}:\n${branch}`;
+    };
+
+    Blockly.Python['if_else_statement'] = function(block) {
+        const condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
+        const branch_do = Blockly.Python.statementToCode(block, 'DO0') || Blockly.Python.PASS;
+        const branch_else = Blockly.Python.statementToCode(block, 'ELSE') || Blockly.Python.PASS;
+        return `if ${condition}:\n${branch_do}else:\n${branch_else}`;
+    };
+
+    Blockly.Python['while_loop'] = function(block) {
+        const condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_NONE) || 'False';
+        const branch = Blockly.Python.statementToCode(block, 'DO') || Blockly.Python.PASS;
+        return `while ${condition}:\n${branch}`;
+    };
+
+    Blockly.Python['do_while_loop'] = function(block) {
+        const branch = Blockly.Python.statementToCode(block, 'DO') || Blockly.Python.PASS;
+        const condition = Blockly.Python.valueToCode(block, 'CONDITION', Blockly.Python.ORDER_LOGICAL_NOT) || 'False';
+        return `while not (${condition}):\n${branch}`;
+    };
+
+    Blockly.Python['for_loop'] = function(block) {
+        const varName = Blockly.Python.variableDB_.getName(block.getFieldValue('VAR'), 'VARIABLE');
+        const fromVal = Blockly.Python.valueToCode(block, 'FROM', Blockly.Python.ORDER_NONE) || '0';
+        const toVal = Blockly.Python.valueToCode(block, 'TO', Blockly.Python.ORDER_NONE) || '0';
+        const stepVal = Blockly.Python.valueToCode(block, 'STEP', Blockly.Python.ORDER_NONE) || '1';
+        const branch = Blockly.Python.statementToCode(block, 'DO') || Blockly.Python.PASS;
+
+        // The end value of the range is inclusive, so we need to adjust it by 1
+        // depending on the step direction.
+        const endExpr = `int(${toVal}) + (1 if int(${stepVal}) > 0 else -1)`;
+
+        return `for ${varName} in range(int(${fromVal}), ${endExpr}, int(${stepVal})):\n${branch}`;
+    };
+
+    Blockly.Python['inc_dec'] = function(block) {
+        const varName = Blockly.Python.variableDB_.getName(block.getFieldValue('VAR'), 'VARIABLE');
+        const op = block.getFieldValue('OP') === '+1' ? '+=' : '-=';
+        return `${varName} ${op} 1\n`;
+    };
+
+    Blockly.Python['square'] = (block) => [`(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_EXPONENTIATION) || '0'}) ** 2`, Blockly.Python.ORDER_EXPONENTIATION];
+    Blockly.Python['power'] = (block) => [`(${Blockly.Python.valueToCode(block, 'BASE', Blockly.Python.ORDER_EXPONENTIATION) || '0'}) ** (${Blockly.Python.valueToCode(block, 'EXP', Blockly.Python.ORDER_EXPONENTIATION) || '0'})`, Blockly.Python.ORDER_EXPONENTIATION];
+
+    Blockly.Python['random'] = function(block) {
+        Blockly.Python.imports_['random'] = 'import random';
+        const min = Blockly.Python.valueToCode(block, 'MIN', Blockly.Python.ORDER_NONE) || '0';
+        const max = Blockly.Python.valueToCode(block, 'MAX', Blockly.Python.ORDER_NONE) || '0';
+        return [`random.randint(int(${min}), int(${max}))`, Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['random_float'] = function(block) {
+        Blockly.Python.imports_['random'] = 'import random';
+        return ['random.random()', Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['random_choice'] = function(block) {
+        // Defensive fix for potential 'ORDER_MEMBER is not defined' error
+        Blockly.Python.ORDER_MEMBER = Blockly.Python.ORDER_MEMBER || 1.1;
+
+        Blockly.Python.imports_['random'] = 'import random';
+        const list = Blockly.Python.valueToCode(block, 'LIST', Blockly.Python.ORDER_MEMBER) || '[]';
+        return [`random.choice(${list})`, Blockly.Python.ORDER_FUNCTION_CALL];
+    };
+
+    Blockly.Python['integer_cast'] = (block) => [`int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})`, Blockly.Python.ORDER_FUNCTION_CALL];
+    Blockly.Python['display_binary'] = (block) => `print(bin(int(${Blockly.Python.valueToCode(block, 'NUM', Blockly.Python.ORDER_NONE) || '0'})))\n`;
+
+    Blockly.Python['simple_display'] = function(block) {
+        const value = Blockly.Python.valueToCode(block, 'VALUE', Blockly.Python.ORDER_NONE) || '""';
+        const newline = block.getFieldValue('NEWLINE') === 'TRUE';
+        return `print(${value}${newline ? '' : ', end=""'})\n`;
+    };
+
+    Blockly.Python['display'] = function(block) {
+        const parts = [];
+        for (let i = 0; i < block.itemCount_; i++) {
+            parts.push(Blockly.Python.valueToCode(block, 'ADD' + i, Blockly.Python.ORDER_NONE) || '""');
+        }
+        const string_parts = parts.map(p => `str(${p})`);
+        const text = string_parts.join(' + ') || '""';
+        const newline = block.getFieldValue('NEWLINE') === 'TRUE';
+        return `print(${text}${newline ? '' : ', end=""'})\n`;
+    };
+
+    Blockly.Python['breakpoint'] = (block) => '# Breakpoint is not supported in Python export.\npass\n';
+
+    //======================================================================
+    // インタプリタの初期化と拡張
+    //======================================================================
+    /**
+     * JS-Interpreterインスタンスを初期化し、カスタム関数を登録する
+     * @param {Interpreter} interpreter JS-Interpreterのインスタンス
+     * @param {Object} globalObject インタプリタのグローバルスコープ
+     */
+    function initInterpreter(interpreter, globalObject) {
+        // JS-Interpreter内で使えるネイティブ関数を作成するヘルパー
+
+        function createNative(func) { return interpreter.createNativeFunction(func); }
+        function createAsync(func) { return interpreter.createAsyncFunction(func); }
+
+
+        // displayOutput, myPromptなどをインタプリタのグローバルのグローバルスコープに追加
+        interpreter.setProperty(globalObject, 'displayOutput', createNative((text, isError, addNewline) => displayOutput(text !== null && text !== undefined ? text.toString() : "", isError, addNewline)));
+        interpreter.setProperty(globalObject, 'displayBinary', createNative(num => displayBinary(num || 0)));
+        interpreter.setProperty(globalObject, 'safeArrayAccess', createNative((arr, idx) => safeArrayAccess(arr, idx)));
+        interpreter.setProperty(globalObject, 'safeArrayAccess2d', createNative((arr, i, j) => safeArrayAccess2d(arr, i, j)));
+        interpreter.setProperty(globalObject, 'nativeLog', createNative((varName, value) => window.nativeLog(varName, interpreter.pseudoToNative(value))));
+
+        const myPromptWrapper = (text, callback) => {
+            isPausedForAsync = true;
+            // Add a short delay to allow the browser to render the output before showing the prompt.
+            setTimeout(() => {
+                const result = window.prompt(text);
+                // The callback will resume the interpreter.
+                callback(result);
+                // After the prompt is closed, resume execution.
+                continueRunAll();
+            }, 100);
+        };
+        interpreter.setProperty(globalObject, 'myPrompt', createAsync((text, cb) => myPromptWrapper(text, cb)));
+
+
+        // ブレークポイント処理用の関数
+        interpreter.setProperty(globalObject, 'checkBreakpoint', createNative((number) => {
+            if (!ignoreBreakpoints) {
+                myInterpreter.paused_ = true;
+                myInterpreter.breakpointNumber = number;
+            }
+        }));
+
+        // 関数の呼び出しと戻り値をフックして出力パネルに表示
+        const originalFuncCall = interpreter.functionCall;
+        interpreter.functionCall = function (func, funcThis, args) {
+            let funcName = (func.node && func.node.id) ? func.node.id.name : "匿名関数";
+            const argVals = args ? args.map(a => interpreter.pseudoToNative(a)) : [];
+            // [FIX] パフォーマンス低下を防ぐため、大量に呼び出される可能性のあるログ出力を無効化
+            // displayOutput(`<div class='function-call'>関数呼び出し: ${funcName}(${argVals.join(", ")})</div>`, false, false);
+            const result = originalFuncCall.call(this, func, funcThis, args);
+            if (result !== undefined && func.node.type !== 'FunctionDeclaration') {
+                const returnVal = interpreter.pseudoToNative(result);
+                // [FIX] パフォーマンス低下を防ぐため、大量に呼び出される可能性のあるログ出力を無効化
+                // displayOutput(`<div class='function-return'>関数 ${funcName} の戻り値: ${returnVal}</div>`, false, false);
+            }
+            return result;
+        };
+    }
+
+    //======================================================================
+    // 内部状態の可視化
+    //======================================================================
+    /**
+     * `window.debugVars`の内容を「内部状態」パネルに描画する
+     */
+    function updateStateDisplayVisual() {
+        const stateDiv = document.getElementById('stateDiv');
+        stateDiv.innerHTML = "";
+        let currentCopy = deepClone(window.debugVars);
+
+        for (const key in window.debugVars) {
+            const container = document.createElement('div');
+            container.className = "var-container";
+
+            const title = document.createElement('div');
+            title.className = "var-title";
+            title.textContent = key;
+            container.appendChild(title);
+
+            const value = window.debugVars[key];
+            const oldValue = previousDebugVars[key];
+
+            if (Array.isArray(value)) {
+                // 2次元配列の場合：テーブルで表示
+                if (Array.isArray(value[0])) {
+                    const table = document.createElement('table');
+                    table.className = 'array-table';
+                    const thead = table.createTHead().insertRow();
+                    thead.insertCell(); // 左上の空セル
+                    for (let j = 0; j < value[0].length; j++) {
+                        const th = document.createElement('th');
+                        th.textContent = oneBasedMode ? j + 1 : j;
+                        thead.appendChild(th);
+                    }
+                    const tbody = table.createTBody();
+                    for (let i = 0; i < value.length; i++) {
+                        const tr = tbody.insertRow();
+                        const th = document.createElement('th');
+                        th.textContent = oneBasedMode ? i + 1 : i;
+                        tr.appendChild(th);
+                        for (let j = 0; j < value[i].length; j++) {
+                            const td = tr.insertCell();
+                            td.textContent = value[i][j];
+                            // 値が変更されていたらハイライト
+                            if (!oldValue || !Array.isArray(oldValue) || !oldValue[i] || value[i][j] !== oldValue[i][j]) {
+                                td.classList.add('highlight');
+                            }
+                        }
+                    }
+                    container.appendChild(table);
+                } else { // 1次元配列の場合：ボックスで表示
+                    const arrayBox = document.createElement('div');
+                    arrayBox.className = "array-box";
+                    for (let i = 0; i < value.length; i++) {
+                        const elemDiv = document.createElement('div');
+                        elemDiv.className = "array-element";
+                        elemDiv.innerHTML = `<div class="array-index">${oneBasedMode ? i + 1 : i}</div>${value[i]}`;
+                        // 値が変更されていたらハイライト
+                        if (!oldValue || !Array.isArray(oldValue) || value[i] !== oldValue[i]) {
+                            elemDiv.classList.add('highlight');
+                        }
+                        arrayBox.appendChild(elemDiv);
+                    }
+                    container.appendChild(arrayBox);
+                }
+            } else { // 通常の変数の場合
+                const textDiv = document.createElement('div');
+                textDiv.textContent = value;
+                // 値が変更されていたらハイライト
+                if (value !== oldValue) {
+                    textDiv.classList.add('highlight');
+                }
+                container.appendChild(textDiv);
+            }
+            stateDiv.appendChild(container);
+        }
+        previousDebugVars = currentCopy; // 現在の状態を保存
+    }            //======================================================================
+    // プログラム実行制御
+    //======================================================================
+    /**
+     * 実行状態をリセットする
+     */
+    function resetExecution() {
+        if (myInterpreter) myInterpreter = null;
+        window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
+        document.getElementById('outputDiv').innerHTML = "";
+        document.getElementById('stateDiv').innerHTML = "";
+        window.debugVars = {};
+        previousDebugVars = {};
+        clearExecutionHistory(); // 実行履歴もクリア
+        setRunStatus("待機中");
+    }            /*
+     * インタープリターを準備する。コード生成時のエラーも捕捉する。
+     * @returns {boolean} 準備に成功したか
+     */
+    function prepareInterpreter() {
+        // 既にインタープリターが存在する場合（復元された状態など）はそのまま使用
+        if (myInterpreter) return true;
+
+        try {
+            // ワークスペース上の全ての変数を取得し、`var`宣言を生成
+            const allVariables = workspace.getAllVariables();
+            const varNames = allVariables.map(v => v.name);
+            const declarationString = varNames.length > 0 ? `var ${[...new Set(varNames)].join(', ')};\n` : '';
+
+            // ブロックからJavaScriptコードを生成（ここでエラーがスローされる可能性がある）
+            const blockCode = Blockly.JavaScript.workspaceToCode(workspace);
+            const finalCode = declarationString + blockCode;
+
+            myInterpreter = new Interpreter(finalCode, initInterpreter);
+            window.myInterpreter = myInterpreter; // デバッグ用にグローバルに公開
+
+            return true;
+        } catch (e) {
+            setRunStatus("コード生成エラー", "status-error");
+            displayOutput("コード生成エラー: " + e.message, true);
+            return false;
+        }
+    }
+
+    /*
+     * インタープリターを指定ステップ数まで高速実行する（復元用）
+     * @param {number} targetSteps 目標ステップ数
+     * @returns {boolean} 復元に成功したか
+     */
+    function fastForwardToStep(targetSteps) {
+        if (!myInterpreter || targetSteps <= 0) return true;
+
+        let stepCount = 0;
+        const maxSteps = targetSteps * 2; // 安全のため最大実行数を制限
+
+        try {
+            while (stepCount < targetSteps && stepCount < maxSteps) {
+                // タイムアウトチェック
+                if (stepCount++ > EXECUTION_TIMEOUT_STEPS) {
+                    displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
+                    setRunStatus("タイムアウト", "status-error");
+                    myInterpreter = null;
+                    return;
+                }
+                try {
+                    executionHistory.interpreterStepCounter++;
+                    if (!myInterpreter.step()) {
+                        // プログラムが終了した
+                        break;
+                    }
+                } catch (e) {
+                    console.error("高速実行中にエラー:", e);
+                    displayOutput("実行エラー: " + e.message, true);
+                    setRunStatus("エラー発生", "status-error");
+                    myInterpreter = null;
+                    return;
+                }
+            }
+
+            return stepCount >= targetSteps;
+        } catch (e) {
+            console.error("高速実行中にエラー:", e);
+            return false;
+        }
+    }/**
+     * 次のブレークポイントまで、またはプログラム終了まで実行する（ステップ実行）
+     */
+    function stepCode() {
+        // インタープリターが既に存在する場合（復元された状態）はそのまま使用
+        // 存在しない場合は新しく準備
+        if (!myInterpreter && !prepareInterpreter()) {
+            return;
+        }
+
+        ignoreBreakpoints = false; // ブレークポイントを有効にする
+
+        // 初回実行時は開始時点のスナップショットを保存
+        if (executionHistory.snapshots.length === 0) {
+            executionHistory.stepCounter = 0;
+            saveExecutionSnapshot();
+        }
+
+        setRunStatus("ステップ実行中...");
+
+        let stepCount = 0;
+        let finished = false;
+        while (true) {
+            // タイムアウトチェック
+            if (stepCount++ > EXECUTION_TIMEOUT_STEPS) {
+                displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
+                setRunStatus("タイムアウト", "status-error");
+                myInterpreter = null;
+                return;
+            }
+            try {
+                executionHistory.interpreterStepCounter++;
+                if (!myInterpreter.step()) {
+                    finished = true; // プログラムが終了した
+                    break;
+                }
+                if (myInterpreter.paused_) {
+                    break; // ブレークポイントで一時停止した
+                }
+            } catch (e) {
+                displayOutput("実行エラー: " + e.message, true);
+                setRunStatus("エラー発生", "status-error");
+                myInterpreter = null;
+                return;
+            }
+        }
+
+        // ステップカウンターを増加してスナップショットを保存
+        executionHistory.stepCounter++;
+        saveExecutionSnapshot();
+
+        updateStateDisplayVisual(); // 状態を更新
+
+        if (finished) {
+            setRunStatus("プログラム終了", "status-success");
+            document.getElementById('executionFinishedModal').style.display = 'flex';
+        } else if (myInterpreter && myInterpreter.paused_) {
+            const bpNum = myInterpreter.breakpointNumber;
+            myInterpreter.paused_ = false; // 次のステップ実行のためにpausedフラグをリセット
+            myInterpreter.breakpointNumber = null;
+            const statusText = (bpNum !== null && bpNum !== undefined) ? `ブレークポイント ${bpNum}` : 'ブレークポイント';
+            setRunStatus(statusText);
+        } else {
+            setRunStatus(`ステップ ${executionHistory.stepCounter}`);
+        }
+    }
+
+    /**
+     * プログラムを最後まで一括実行する
+     */
+    function continueRunAll() {
+        if (!myInterpreter) { return; }
+        isPausedForAsync = false; // Resume execution
+        runner();
+    }
+
+    function runner() {
+        if (!myInterpreter) { return; }
+
+        const BATCH_SIZE = 2000;
+        let stepCount = 0;
+
+        try {
+            for (let i = 0; i < BATCH_SIZE; i++) {
+                if (executionHistory.interpreterStepCounter++ > EXECUTION_TIMEOUT_STEPS) {
+                    if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
+                    displayOutput("実行がタイムアウトしました。無限ループの可能性があります。", true);
+                    setRunStatus("タイムアウト", "status-error");
+                    myInterpreter = null;
+                    return;
+                }
+
+                if (!myInterpreter.step()) {
+                    if (isPausedForAsync) {
+                        // Paused for async operation, the callback will restart the runner.
+                        return;
+                    }
+                    // Program finished successfully.
+                    if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
+                    updateStateDisplayVisual();
+                    setRunStatus("プログラム終了", "status-success");
+                    myInterpreter = null;
+                    return;
+                }
+            }
+            // Yield to the event loop and continue execution.
+            runnerTimeoutId = setTimeout(runner, 0);
+        } catch (e) {
+            displayOutput("実行エラー: " + e.message, true);
+            updateStateDisplayVisual();
+            setRunStatus("エラー発生", "status-error");
+            myInterpreter = null;
+        }
+    }
+
+    function runAll() {
+        // 実行前に状態をリセット
+        if (runnerTimeoutId) clearTimeout(runnerTimeoutId);
+        myInterpreter = null;
+        window.myInterpreter = null; // [FIX] グローバル参照をクリアしてメモリリークを防止
+        document.getElementById('outputDiv').innerHTML = "";
+        document.getElementById('stateDiv').innerHTML = "";
+        window.debugVars = {};
+        previousDebugVars = {};
+        isPausedForAsync = false;
+        executionHistory.interpreterStepCounter = 0;
+
+        if (!prepareInterpreter()) return;
+
+        ignoreBreakpoints = true;
+        setRunStatus("一括実行中...");
+        runner();
+    }
+
+    //======================================================================
+    // UI（ペインのリサイズ）ロジック
+    //======================================================================
+    /**
+     * [FIX] タッチイベントに対応したリサイズハンドルの機能を設定する
+     * @param {HTMLElement} resizerEl リサイザー要素
+     * @param {boolean} isVertical 垂直リサイザーか
+     */
+    function setupResizer(resizerEl, isVertical = true) {
+        let startX = 0, startY = 0;
+        let prevSiblingSize = 0;
+
+        const dragStartHandler = function (e) {
+            // ドラッグ中のテキスト選択などを防ぐ
+            e.preventDefault();
+
+            // イベントタイプによって座標の取得方法を切り替える
+            const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+
+            startX = clientX;
+            startY = clientY;
+
+            const prevSibling = resizerEl.previousElementSibling;
+            if (isVertical) {
+                prevSiblingSize = prevSibling.getBoundingClientRect().width;
+            } else {
+                prevSiblingSize = prevSibling.getBoundingClientRect().height;
+            }
+
+            // mousemoveとtouchmoveの両方のイベントリスナーを追加
+            document.addEventListener('mousemove', dragMoveHandler);
+            document.addEventListener('touchmove', dragMoveHandler, { passive: false });
+
+            // mouseupとtouchendの両方のイベントリスナーを追加
+            document.addEventListener('mouseup', dragEndHandler);
+            document.addEventListener('touchend', dragEndHandler);
+        };
+
+        const dragMoveHandler = function (e) {
+            // touchmoveイベントでpreventDefaultを呼び出し、スクロールを防止
+            if (e.type === 'touchmove') {
+                e.preventDefault();
+            }
+
+            const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+
+            const prevSibling = resizerEl.previousElementSibling;
+            if (isVertical) {
+                const dx = clientX - startX;
+                const newWidth = prevSiblingSize + dx;
+                if (newWidth > 100) { // 最小幅制限
+                    prevSibling.style.flex = `0 0 ${newWidth}px`;
+                }
+            } else {
+                const dy = clientY - startY;
+                const newHeight = prevSiblingSize + dy;
+                if (newHeight > 50) { // 最小高さ制限
+                    prevSibling.style.flex = `0 0 ${newHeight}px`;
+                }
+            }
+            // Blocklyワークスペースのサイズを更新するためにリサイズイベントを発火
+            window.dispatchEvent(new Event('resize'));
+        };
+
+        const dragEndHandler = function () {
+            // すべてのイベントリスナーを解除
+            document.removeEventListener('mousemove', dragMoveHandler);
+            document.removeEventListener('touchmove', dragMoveHandler);
+            document.removeEventListener('mouseup', dragEndHandler);
+            document.removeEventListener('touchend', dragEndHandler);
+        };
+
+        // mousedownとtouchstartの両イベントでドラッグを開始
+        resizerEl.addEventListener('mousedown', dragStartHandler);
+        resizerEl.addEventListener('touchstart', dragStartHandler, { passive: false });
+    }
+
+
+    //======================================================================
+    // インポート/エクスポート機能
+    //======================================================================
+    async function exportBlocks() {
+        try {
+            const xml = Blockly.Xml.workspaceToDom(workspace);
+            const xmlText = Blockly.Xml.domToPrettyText(xml);
+
+            // Modern "Save As" API
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'dncl_program.xml',
+                        types: [{
+                            description: 'XML Files',
+                            accept: { 'text/xml': ['.xml'] },
+                        }],
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(xmlText);
+                    await writable.close();
+                    return;
+                } catch (err) {
+                    // Handle user cancellation, which throws a "DOMException"
+                    if (err.name !== 'AbortError') {
+                        console.error(err);
+                        alert("エクスポート失敗: " + err.message);
+                    }
+                    return; // Stop if user cancels
+                }
+            }
+
+            // Fallback for older browsers
+            const a = document.createElement('a');
+            a.href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(xmlText);
+            a.download = 'dncl_program.xml';
+            a.click();
+        } catch (e) {
+            alert("エクスポート失敗: " + e.message);
+            console.error(e);
+        }
+    }
+
+    function importBlocks() {
+        document.getElementById('importFile').click();
+    }
+
+    async function copyXmlToClipboard() {
+        const button = document.getElementById('copyXmlButton');
+        try {
+            const xml = Blockly.Xml.workspaceToDom(workspace);
+            const xmlText = Blockly.Xml.domToPrettyText(xml);
+
+            if (!navigator.clipboard) {
+                alert("クリップボードAPIは、このブラウザではサポートされていません。");
+                return;
+            }
+
+            await navigator.clipboard.writeText(xmlText);
+
+            // Visual feedback
+            const originalContent = button.innerHTML;
+            button.innerHTML = 'コピーしました!';
+            button.style.color = 'var(--status-success-color)';
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.style.color = '';
+            }, 2000);
+
+        } catch (err) {
+            console.error('XMLのコピーに失敗:', err);
+            alert('コピーに失敗しました: ' + err.message);
+        }
+    }
+
+    function loadBlocksFromFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const xmlText = e.target.result;
+            try {
+                const xml = Blockly.utils.xml.textToDom(xmlText);
+                workspace.clear();
+                Blockly.Xml.domToWorkspace(xml, workspace);
+            } catch (e) {
+                alert("インポート失敗: ファイルが不正です。\n" + e.message);
+                console.error(e);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    //======================================================================
+    // アプリケーションの初期化とイベントリスナー設定
+    //======================================================================
+    // Blocklyワークスペースを注入（生成）
+    workspace = Blockly.inject('blocklyDiv', {
+        toolbox: document.getElementById('toolbox'),
+        scrollbars: true,
+        zoom: { controls: true, wheel: true }
+    });
+    window.workspace = workspace; // Make workspace global for Playwright tests
+    // --- ボタンのイベントリスナー ---
+    document.getElementById('runButton').addEventListener('click', runAll);
+    document.getElementById('stepButton').addEventListener('click', stepCode);
+    document.getElementById('stepBackButton').addEventListener('click', stepBack);
+    document.getElementById('resetButton').addEventListener('click', resetExecution);
+    document.getElementById('exportButton').addEventListener('click', exportBlocks);
+    document.getElementById('copyXmlButton').addEventListener('click', copyXmlToClipboard);
+    document.getElementById('importButton').addEventListener('click', importBlocks);
+    document.getElementById('importFile').addEventListener('change', (e) => loadBlocksFromFile(e.target.files[0]));
+    document.getElementById('oneBasedCheckbox').addEventListener('change', (e) => { oneBasedMode = e.target.checked; });
+
+    // --- コード表示モーダルの設定 ---
+    const codeModal = document.getElementById('codeModal');
+    document.getElementById('showCodeButton').addEventListener('click', () => {
+        const modalTitle = document.querySelector('#codeModal .modal-header h2');
+        let finalCode = '';
+
+        try {
+            modalTitle.textContent = '生成されたコード (Python)';
+            finalCode = Blockly.Python.workspaceToCode(workspace);
+
+            document.getElementById('jsCodeDiv').textContent = finalCode;
+            codeModal.style.display = 'flex';
+        } catch (e) {
+            console.error("Code generation failed:", e);
+            setRunStatus("コード生成エラー", "status-error");
+            displayOutput("コード生成エラー: " + e.message, true);
+            document.getElementById('jsCodeDiv').textContent = "コードの生成に失敗しました。\n" + e.message;
+            codeModal.style.display = 'flex';
+        }
+    });
+    document.getElementById('modalCloseButton').addEventListener('click', () => { codeModal.style.display = 'none'; });
+    codeModal.addEventListener('click', (e) => { if (e.target === codeModal) { codeModal.style.display = 'none'; } }); // 背景クリックで閉じる
+
+    // --- Pythonインポートモーダルの設定 ---
+    const pythonImportModal = document.getElementById('pythonImportModal');
+    document.getElementById('importFromPythonButton').addEventListener('click', () => {
+        pythonImportModal.style.display = 'flex';
+    });
+    document.getElementById('pythonImportModalCloseButton').addEventListener('click', () => {
+        pythonImportModal.style.display = 'none';
+    });
+    pythonImportModal.addEventListener('click', (e) => {
+        if (e.target === pythonImportModal) {
+            pythonImportModal.style.display = 'none';
+        }
+    });
+
+    document.getElementById('convertPythonButton').addEventListener('click', () => {
+        const pythonCode = document.getElementById('pythonCodeTextarea').value;
+        try {
+            const xmlText = convertPythonToBlockly(pythonCode);
+            const xml = Blockly.utils.xml.textToDom(xmlText);
+            workspace.clear();
+            Blockly.Xml.domToWorkspace(xml, workspace);
+            pythonImportModal.style.display = 'none'; // 成功したら閉じる
+        } catch (e) {
+            alert("Pythonコードの変換に失敗しました。\n" + e.message);
+            console.error("Python to Blockly conversion error:", e);
+        }
+    });
+
+    // --- 実行終了モーダルの設定 ---
+    const executionFinishedModal = document.getElementById('executionFinishedModal');
+    const executionFinishedModalCloseButton = document.getElementById('executionFinishedModalCloseButton');
+    executionFinishedModalCloseButton.addEventListener('click', () => { executionFinishedModal.style.display = 'none'; });
+    executionFinishedModal.addEventListener('click', (e) => { if (e.target === executionFinishedModal) { executionFinishedModal.style.display = 'none'; } });
+
+    // --- リサイザーの初期化 ---
+    setupResizer(document.getElementById('resizerV'), true);
+    setupResizer(document.getElementById('resizerH'), false);
+
+    //======================================================================
+    // PythonからBlocklyへの変換
+    //======================================================================
+    /**
+     * Pythonコードの文字列をBlocklyのXMLに変換する
+     * @param {string} pythonCode 変換するPythonコード
+     * @returns {string} Blockly XML文字列
+     */
+    function convertPythonToBlockly(pythonCode) {
+        const lines = pythonCode.split('\n');
+        // --- Pass 1: Build Abstract Syntax Tree (AST) ---
+        function buildAst() {
+            const root = { type: 'ROOT', children: [], indent: -1 };
+            const stack = [root];
+
+            function getNodeType(line) {
+                if (line.trim() === 'break') return 'break';
+                if (line.startsWith('def ')) return 'func_def';
+                if (line.startsWith('while ')) return 'while';
+                if (line.startsWith('for ')) return 'for';
+                if (line.startsWith('if ')) return 'if';
+                if (line.startsWith('elif ')) return 'elif';
+                if (line.startsWith('else:')) return 'else';
+                if (line.startsWith('print(')) return 'print';
+                if (line.includes('=')) return 'assign';
+                if (line.match(/^[a-zA-Z_][a-zA-Z0-9_]*\(.*\)$/)) return 'func_call';
+                return 'unknown';
+            }
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) continue;
+
+                const indent = line.match(/^\s*/)[0].length;
+                const node = {
+                    type: getNodeType(trimmed),
+                    content: trimmed,
+                    children: [],
+                    indent: indent
+                };
+
+                while (stack[stack.length - 1].indent >= indent) {
+                    stack.pop();
+                }
+
+                stack[stack.length - 1].children.push(node);
+                stack.push(node);
+            }
+            return root;
+        }
+
+        // --- Pass 2: Generate XML from AST ---
+        let y = 10;
+        function generateXml(nodes) {
+            let xml = '';
+            let i = 0;
+            while (i < nodes.length) {
+                const node = nodes[i];
+
+                // Break statements (ignored)
+                if (node.type === 'break') {
+                    i++;
+                }
+                // Function Definition
+                else if (node.type === 'func_def') {
+                    xml += generateFuncDefXml(node);
+                    i++;
+                }
+                // Function Call
+                else if (node.type === 'func_call') {
+                    xml += parseStatementXml(node.content); // Reuse statement parser for this
+                    i++;
+                }
+                // while ループ
+                else if (node.type === 'while') {
+                    xml += generateWhileLoopXml(node);
+                    i++;
+                }
+                // for ループ
+                else if (node.type === 'for') {
+                    xml += generateForLoopXml(node);
+                    i++;
+                }
+                // if-elif-elseチェーンをグループとして処理
+                else if (node.type === 'if') {
+                    const chain = [node];
+                    let j = i + 1;
+                    while (j < nodes.length && (nodes[j].type === 'elif' || nodes[j].type === 'else')) {
+                        chain.push(nodes[j]);
+                        j++;
+                    }
+
+                    const { xml: chainXml, consumed } = generateIfChainXml(chain);
+                    xml += chainXml;
+                    i += consumed;
+                } else { // その他のステートメント
+                    const statementXml = parseStatementXml(node.content);
+                    if (statementXml) {
+                        xml += statementXml.replace('<block', `<block y="${y}"`);
+                        y += 70;
+                    }
+                    i++;
+                }
+
+                // 次のブロックとの接続
+                if (i < nodes.length && xml) {
+                    const nextXml = generateXml(nodes.slice(i));
+                    if(nextXml) {
+                        xml = xml.replace(/<\/block>\s*$/, `<next>${nextXml}</next></block>`);
+                    }
+                    break;
+                }
+            }
+            return xml;
+        }
+
+        function generateIfChainXml(chain) {
+            if (!chain || chain.length === 0) {
+                return { xml: '', consumed: 0 };
+            }
+
+            const head = chain[0];
+            const tail = chain.slice(1);
+
+            // Base case: 'else' block
+            if (head.type === 'else') {
+                const doXml = generateXml(head.children);
+                return { xml: doXml, consumed: 1 };
+            }
+
+            // 'if' or 'elif' block
+            const conditionMatch = head.content.match(/^(if|elif)\s+(.*):$/);
+            const conditionXml = parseConditionXml(conditionMatch[2]);
+            const doXml = generateXml(head.children);
+
+            let elseXml = '';
+            let consumed = 1;
+            if (tail.length > 0) {
+                const { xml: nextChainXml, consumed: nextConsumed } = generateIfChainXml(tail);
+                elseXml = nextChainXml;
+                consumed += nextConsumed;
+            }
+
+            let finalXml;
+            if (elseXml) {
+                finalXml = `
+                <block type="if_else_statement">
+                    <value name="CONDITION">${conditionXml}</value>
+                    <statement name="DO0">${doXml}</statement>
+                    <statement name="ELSE">${elseXml}</statement>
+                </block>`;
+            } else {
+                finalXml = `
+                <block type="if_statement">
+                    <value name="CONDITION">${conditionXml}</value>
+                    <statement name="DO">${doXml}</statement>
+                </block>`;
+            }
+
+            return { xml: finalXml.replace('<block', `<block y="${y}"`), consumed: consumed };
+        }
+
+        function generateFuncDefXml(node) {
+            const match = node.content.match(/^def\s+([a-zA-Z_][a-zA-Z0-9_]*)\((.*)\):$/);
+            if (!match) return '';
+
+            const funcName = match[1];
+            const args = match[2].split(',').map(s => s.trim()).filter(s => s);
+            const doXml = generateXml(node.children);
+
+            let argsXml = '';
+            if (args.length > 0) {
+                argsXml = '<mutation>';
+                for (const arg of args) {
+                    argsXml += `<arg name="${arg}"></arg>`;
+                }
+                argsXml += '</mutation>';
+            }
+
+            return `
+                <block type="procedures_defnoreturn" y="${y}">
+                    ${argsXml}
+                    <field name="NAME">${funcName}</field>
+                    <statement name="STACK">${doXml}</statement>
+                </block>`;
+        }
+
+        function generateWhileLoopXml(node) {
+            const match = node.content.match(/^while\s+(.*):$/);
+            if (!match) return '';
+
+            const conditionXml = parseValueXml(match[1].trim());
+            const doXml = generateXml(node.children);
+
+            return `
+                <block type="while_loop" y="${y}">
+                    <value name="CONDITION">${conditionXml}</value>
+                    <statement name="DO">${doXml}</statement>
+                </block>`;
+        }
+
+        function generateForLoopXml(node) {
+            // Case 1: for i in range(...)
+            const rangeMatch = node.content.match(/^for\s+(.*)\s+in\s+range\((.*)\):$/);
+            if (rangeMatch) {
+                const varName = rangeMatch[1];
+                const rangeArgs = rangeMatch[2].split(',');
+
+                let fromXml, toXml, stepXml;
+                if (rangeArgs.length === 1) { // range(N)
+                    fromXml = '<block type="number_literal"><field name="NUM">0</field></block>';
+                    toXml = parseValueXml(rangeArgs[0].trim() + " - 1");
+                    stepXml = '<block type="number_literal"><field name="NUM">1</field></block>';
+                } else { // range(start, stop, [step])
+                    fromXml = parseValueXml(rangeArgs[0].trim());
+                    toXml = parseValueXml(rangeArgs[1].trim() + " - 1");
+                    stepXml = rangeArgs.length > 2 ? parseValueXml(rangeArgs[2].trim()) : '<block type="number_literal"><field name="NUM">1</field></block>';
+                }
+
+                const doXml = generateXml(node.children);
+
+                return `
+                    <block type="for_loop" y="${y}">
+                        <field name="VAR">${varName}</field>
+                        <value name="FROM">${fromXml}</value>
+                        <value name="TO">${toXml}</value>
+                        <value name="STEP">${stepXml}</value>
+                        <statement name="DO">${doXml}</statement>
+                    </block>`;
+            }
+
+            // Case 2: for x in list
+            const listMatch = node.content.match(/^for\s+(.*)\s+in\s+(.*):$/);
+            if (listMatch) {
+                // This is complex to convert directly. We simulate it:
+                // for _i in range(0, len(list)):
+                //   x = list[_i]
+                // NOTE: This is a major simplification and has limitations.
+                const itemVar = listMatch[1];
+                const listVar = listMatch[2];
+                const indexVar = `_i_${itemVar}`; // A temporary index variable
+
+                // Inner block: x = list[_i]
+                const assignmentXml = `
+                    <block type="assignment">
+                        <field name="VAR">${itemVar}</field>
+                        <value name="VALUE">
+                            <block type="array_access_1d">
+                                <field name="ARRAY">${listVar}</field>
+                                <value name="INDEX">
+                                    <block type="variable_access">
+                                        <field name="VAR">${indexVar}</field>
+                                    </block>
+                                </value>
+                            </block>
+                        </value>
+                    </block>`;
+
+                const userBlocksXml = generateXml(node.children);
+                let doXml = assignmentXml;
+                if (userBlocksXml) {
+                    const lastIndex = doXml.lastIndexOf('</block>');
+                    if (lastIndex !== -1) {
+                        doXml = doXml.slice(0, lastIndex) + `<next>${userBlocksXml}</next>` + doXml.slice(lastIndex);
+                    }
+                }
+
+                // Generate a block to get the length of the list
+                const lenBlock = `<block type="array_length"><value name="ARRAY"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block>`;
+
+                // The loop should go from 0 to len(list) - 1.
+                // Our for_loop block is inclusive, so the 'to' value should be len(list) - 1.
+                const toXml = `<block type="arithmetic"><field name="OP">-</field><value name="A">${lenBlock}</value><value name="B"><block type="number_literal"><field name="NUM">1</field></block></value></block>`;
+
+                return `
+                    <block type="for_loop" y="${y}">
+                        <field name="VAR">${indexVar}</field>
+                        <value name="FROM"><block type="number_literal"><field name="NUM">0</field></block></value>
+                        <value name="TO">${toXml}</value>
+                        <value name="STEP"><block type="number_literal"><field name="NUM">1</field></block></value>
+                        <statement name="DO">${doXml}</statement>
+                    </block>`;
+            }
+
+            return '';
+        }
+
+        function processNode(nodes, index) {
+            const node = nodes[index];
+            const content = node.content;
+            let match;
+
+            // --- IF/ELIF/ELSE ---
+            if (content.startsWith('if') || content.startsWith('elif') || content.startsWith('else')) {
+                return processIfChain(nodes, index);
+            }
+
+            // --- Single Statement ---
+            let xml = parseStatementXml(content);
+            if(xml) {
+                 xml = xml.replace('<block', `<block y="${y}"`);
+                 y += 70;
+            }
+            return { xml: xml, consumedNodes: 1 };
+        }
+
+        function processIfChain(nodes, index) {
+            const startNode = nodes[index];
+            const ifMatch = startNode.content.match(/^(if|elif)\s+(.*):$/);
+            const elseMatch = startNode.content.match(/^else:$/);
+
+            if (!ifMatch && !elseMatch) return { xml: '', consumedNodes: 1};
+
+            let conditionXml = ifMatch ? parseConditionXml(ifMatch[2]) : '';
+            let doXml = generateXml(startNode.children);
+
+            let consumed = 1;
+            let elseXml = '';
+
+            if (index + 1 < nodes.length) {
+                const nextNode = nodes[index + 1];
+                if (nextNode.content.startsWith('elif') || nextNode.content.startsWith('else')) {
+                    const { xml: nextChainXml, consumedNodes: nextConsumed } = processIfChain(nodes, index + 1);
+                    elseXml = nextChainXml;
+                    consumed += nextConsumed;
+                }
+            }
+
+            if (elseMatch) { // else節は前のifのELSEに繋がる
+                return { xml: doXml, consumedNodes: consumed };
+            }
+
+            let finalXml;
+            if (elseXml) {
+                finalXml = `
+                <block type="if_else_statement" y="${y}">
+                    <value name="CONDITION">${conditionXml}</value>
+                    <statement name="DO0">${doXml}</statement>
+                    <statement name="ELSE">${elseXml}</statement>
+                </block>`;
+            } else {
+                finalXml = `
+                <block type="if_statement" y="${y}">
+                    <value name="CONDITION">${conditionXml}</value>
+                    <statement name="DO">${doXml}</statement>
+                </block>`;
+            }
+            y+= 150;
+
+            return { xml: finalXml, consumedNodes: consumed };
+        }
+
+        function parseConditionXml(conditionStr) {
+            const compMatch = conditionStr.match(/(.*)\s*(==|!=|>|<|>=|<=)\s*(.*)/);
+            if (compMatch) {
+                const [_, lhs, op, rhs] = compMatch;
+                return `
+                    <block type="comparison">
+                        <field name="OP">${op.replace('==', '===')}</field>
+                        <value name="A">${parseValueXml(lhs.trim())}</value>
+                        <value name="B">${parseValueXml(rhs.trim())}</value>
+                    </block>`;
+            }
+            return '<block type="logic_boolean"><field name="BOOL">TRUE</field></block>';
+        }
+
+        function parseValueXml(expression) {
+            expression = expression.trim();
+
+            // Handle len()
+            const lenMatch = expression.match(/^len\((.*)\)$/);
+            if (lenMatch) {
+                return `<block type="array_length"><value name="ARRAY">${parseValueXml(lenMatch[1])}</value></block>`;
+            }
+
+            // Handle parentheses and int() casting
+            if (expression.startsWith('(') && expression.endsWith(')')) {
+                return parseValueXml(expression.slice(1, -1));
+            }
+            if (expression.startsWith('int(') && expression.endsWith(')')) {
+                return parseValueXml(expression.slice(4, -1));
+            }
+
+            // Lowest precedence: + and -
+            let i = expression.length - 1;
+            let parenCount = 0;
+            while (i >= 0) {
+                const char = expression[i];
+                if (char === ')') parenCount++;
+                else if (char === '(') parenCount--;
+                else if (parenCount === 0 && (char === '+' || char === '-')) {
+                     return `
+                        <block type="arithmetic">
+                            <field name="OP">${char}</field>
+                            <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                            <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                        </block>`;
+                }
+                i--;
+            }
+
+            // Next precedence: * and /
+            i = expression.length - 1;
+            parenCount = 0;
+            while (i >= 0) {
+                const char = expression[i];
+                if (char === ')') parenCount++;
+                else if (char === '(') parenCount--;
+                else if (parenCount === 0 && (char === '*' || char === '/')) {
+                    const op = char === '*' ? '*' : '/'; // Use '*' for value, not '×'
+                    return `
+                        <block type="arithmetic">
+                            <field name="OP">${op}</field>
+                            <value name="A">${parseValueXml(expression.slice(0, i))}</value>
+                            <value name="B">${parseValueXml(expression.slice(i + 1))}</value>
+                        </block>`;
+                }
+                i--;
+            }
+
+            // Base cases
+            // Array access
+            const arrayAccessMatch = expression.match(/^(.*)\[(.*)\]$/);
+            if (arrayAccessMatch) {
+                return `
+                    <block type="array_access_1d">
+                        <field name="ARRAY">${arrayAccessMatch[1]}</field>
+                        <value name="INDEX">${parseValueXml(arrayAccessMatch[2])}</value>
+                    </block>`;
+            }
+
+            if (!isNaN(Number(expression))) {
+                return `<block type="number_literal"><field name="NUM">${expression}</field></block>`;
+            }
+            if (expression.startsWith('"') && expression.endsWith('"')) {
+                return `<block type="string_literal"><field name="TEXT">${expression.slice(1, -1)}</field></block>`;
+            }
+            return `<block type="variable_access"><field name="VAR">${expression}</field></block>`;
+        }
+
+        function parseStatementXml(content) {
+            let match;
+
+            // --- Augmenting Assignment (+=) ---
+            const augmentMatch = content.match(/^(.*)\s*(\+=)\s*(.*)$/);
+            if (augmentMatch) {
+                const varName = augmentMatch[1].trim();
+                const value = augmentMatch[3].trim();
+                const arithmeticXml = parseValueXml(`${varName} + ${value}`);
+                return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${arithmeticXml}</value></block>`;
+            }
+
+            // --- Swap Pattern ---
+            const swapMatch = content.match(/^(.*?),\s*(.*?)\s*=\s*(.*?),\s*(.*?)$/);
+            if (swapMatch && swapMatch[1].trim() === swapMatch[4].trim() && swapMatch[2].trim() === swapMatch[3].trim()) {
+                const a = swapMatch[1].trim();
+                const b = swapMatch[2].trim();
+                const tempVar = `_temp_swap`;
+
+                const temp_equals_a = `<block type="assignment"><field name="VAR">${tempVar}</field><value name="VALUE">${parseValueXml(a)}</value></block>`;
+                const a_equals_b = `<block type="assignment"><field name="VAR">${a}</field><value name="VALUE">${parseValueXml(b)}</value></block>`;
+                const b_equals_temp = `<block type="assignment"><field name="VAR">${b}</field><value name="VALUE">${parseValueXml(tempVar)}</value></block>`;
+
+                // Chain them together
+                return temp_equals_a.replace('</block>', `<next>${a_equals_b.replace('</block>', `<next>${b_equals_temp}</next></block>`)}</next></block>`);
+            }
+
+            // --- Assignment ---
+            if ((match = content.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.*)$/))) {
+                const varName = match[1];
+                const valueStr = match[2].trim();
+                // random.choice
+                if (valueStr.startsWith('random.choice')) {
+                    const listVar = valueStr.match(/random\.choice\((.*)\)/)[1].trim();
+                    return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_choice"><value name="LIST"><block type="variable_access"><field name="VAR">${listVar}</field></block></value></block></value></block>`;
+                }
+                // random.random
+                if (valueStr.startsWith('random.random')) {
+                    return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="random_float"></block></value></block>`;
+                }
+                // input
+                if (valueStr.startsWith('input')) {
+                    return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE"><block type="external_input"><field name="TYPE">STRING</field></block></value></block>`;
+                }
+                // list
+                if (valueStr.startsWith('[')) {
+                    const elements = valueStr.slice(1, -1).split(',').map(s => s.trim().replace(/"/g, ''));
+                    return `<block type="array_assignment_full"><field name="ARRAY">${varName}</field><field name="ELEMENTS">${elements.join(',')}</field></block>`;
+                }
+                // simple assignment
+                return `<block type="assignment"><field name="VAR">${varName}</field><value name="VALUE">${parseValueXml(valueStr)}</value></block>`;
+            }
+            // --- Print ---
+            if (content.startsWith('print(')) {
+                const match = content.match(/^print\((.*)\)$/);
+                const arg = match[1].trim();
+                const formatMatch = arg.match(/^"(.*){}"\.format\((.*)\)$/);
+                if (formatMatch) {
+                    const textPart = formatMatch[1];
+                    const varPart = formatMatch[2].trim();
+                    return `<block type="display"><mutation items="2"></mutation><field name="NEWLINE">TRUE</field><value name="ADD0"><block type="string_literal"><field name="TEXT">${textPart}</field></block></value><value name="ADD1"><block type="variable_access"><field name="VAR">${varPart}</field></block></value></block>`;
+                }
+                return `<block type="simple_display"><field name="NEWLINE">TRUE</field><value name="VALUE">${parseValueXml(arg)}</value></block>`;
+            }
+            return '';
+        }
+
+        const ast = buildAst();
+        console.log("Generated AST:", JSON.stringify(ast, null, 2));
+        const topLevelXml = generateXml(ast.children);
+        console.log("Generated XML:", topLevelXml);
+        return `<xml xmlns="https://developers.google.com/blockly/xml">${topLevelXml}</xml>`;
+    }
+
+    // --- ウィンドウリサイズ時の処理 ---
+    window.addEventListener('resize', () => Blockly.svgResize(workspace));
+
+    // --- ページを離れる前の確認 ---
+    window.addEventListener('beforeunload', (event) => {
+        if (workspace.getAllBlocks(false).length > 0) {
+            event.preventDefault();
+            event.returnValue = ''; // 標準的なブラウザで確認ダイアログを表示するために必要
+        }
+    });
+
+    // --- 初期ブロックの読み込み ---
+    try {
+        const startXml = document.getElementById('startBlocks');
+        if (startXml.innerHTML.trim()) {
+            Blockly.Xml.domToWorkspace(startXml, workspace);
+        }
+    } catch (e) {
+        console.error("Error loading start blocks:", e);
+        displayOutput("起動時のブロック読み込みエラー: " + e.message, true);
+    }
+
+    // --- ワークスペースを中央にスクロール ---
+    workspace.scrollCenter();
+
+    // --- Mobile tab switching ---
+    const tabs = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            document.getElementById(tab.dataset.tab).classList.add('active');
+        });
+    });
+});

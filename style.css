@@ -1,0 +1,691 @@
+/* CSS変数: アプリケーション全体のデザイン統一のため */
+:root {
+    --header-height: 60px;
+    --header-height-mobile: 52px;
+    --border-color: #e5e7eb;
+    --background-light: #f9fafb;
+    --background-panel: #ffffff;
+    --text-color: #1f2937;
+    --text-secondary: #6b7280;
+    --button-bg: #ffffff;
+    --button-hover-bg: #f9fafb;
+    --button-active-bg: #f3f4f6;
+    --button-border: #d1d5db;
+    --status-error-bg: #fef2f2;
+    --status-error-color: #dc2626;
+    --status-success-bg: #f0fdf4;
+    --status-success-color: #16a34a;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --primary-color: #4f46e5;
+    --primary-hover: #4338ca;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+    color: var(--text-color);
+    touch-action: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--background-light);
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 6px;
+    border: 3px solid var(--background-panel);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* ヘッダーセクション */
+#header {
+    height: var(--header-height);
+    background: var(--background-panel);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    box-sizing: border-box;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+}
+
+#header::-webkit-scrollbar {
+    height: 6px;
+}
+
+.header-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-divider {
+    width: 1px;
+    height: 28px;
+    background: var(--border-color);
+    margin: 0 8px;
+}
+
+#header button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--button-border);
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: var(--shadow-sm);
+    white-space: nowrap;
+    min-height: 40px;
+    color: var(--text-color);
+}
+
+#header button:hover:not(:disabled) {
+    background: var(--button-hover-bg);
+    border-color: #9ca3af;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+#header button:active:not(:disabled) {
+    background: var(--button-active-bg);
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+}
+
+#header button.primary {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+#header button.primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+}
+
+#header button svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+#header button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    background: var(--background-light);
+    transform: none;
+    box-shadow: var(--shadow-sm);
+}
+
+#header button .button-text {
+    display: inline;
+}
+
+#header label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background-color 0.2s;
+}
+#header label:hover {
+    background-color: var(--background-light);
+}
+
+#header input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+}
+
+#runStatusDiv {
+    margin-left: auto;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    min-width: 90px;
+    text-align: center;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    white-space: nowrap;
+    background-color: var(--background-light);
+    color: var(--text-secondary);
+}
+
+#runStatusDiv.status-error {
+    background-color: var(--status-error-bg);
+    color: var(--status-error-color);
+}
+
+#runStatusDiv.status-success {
+    background-color: var(--status-success-bg);
+    color: var(--status-success-color);
+}
+
+#stepCounterDiv {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    background-color: var(--background-light);
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+/* メインコンテナ */
+#mainContainer {
+    display: flex;
+    height: calc(100% - var(--header-height));
+    box-sizing: border-box;
+    padding: 16px;
+    gap: 16px;
+}
+
+.pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--background-panel);
+    border-radius: 12px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+}
+
+#paneLeft {
+    flex: 2;
+    min-width: 350px;
+}
+
+#paneRight {
+    flex: 1;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    border-left: none;
+}
+
+/* ペインのリサイズ用ハンドル */
+.resizer-v {
+    width: 16px;
+    background: transparent;
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    touch-action: none;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.resizer-v::after {
+    content: '';
+    width: 4px;
+    height: 48px;
+    background: var(--border-color);
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.resizer-v:hover::after {
+    background-color: var(--primary-color);
+}
+
+.resizer-h {
+    height: 16px;
+    background: transparent;
+    cursor: row-resize;
+    transition: background-color 0.2s;
+    touch-action: none;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.resizer-h::after {
+    content: '';
+    width: 48px;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    transition: background-color 0.2s;
+}
+
+.resizer-h:hover::after {
+    background-color: var(--primary-color);
+}
+
+/* 各パネルのコンテンツ部分 */
+#blocklyDiv {
+    flex-grow: 1;
+    overflow: auto;
+    border-radius: 0 0 12px 12px;
+}
+
+#outputDiv, #stateDiv {
+    padding: 16px;
+    font-family: 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    background-color: #f9fafb;
+    border-radius: 0 0 12px 12px;
+    flex-grow: 1;
+    overflow: auto;
+}
+
+/* パネルのヘッダー */
+.pane-header {
+    background-color: var(--background-panel);
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 15px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 12px 12px 0 0;
+}
+
+.pane-header svg {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+}
+
+/* 内部状態表示のスタイル */
+.var-container {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--background-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.var-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--primary-color);
+}
+
+.array-table,
+.array-box {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.array-table th,
+.array-table td {
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    text-align: center;
+    min-width: 40px;
+    height: 40px;
+    font-size: 14px;
+}
+
+.array-table th {
+    background-color: var(--background-light);
+    font-weight: 600;
+}
+
+.array-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.array-element {
+    width: 44px;
+    height: 44px;
+    background-color: var(--background-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    position: relative;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.array-index {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.highlight {
+    animation: highlight 1.2s ease-out;
+}
+
+@keyframes highlight {
+    0%, 50% {
+        background-color: #fefce8;
+        border-color: #facc15;
+    }
+    100% {
+        background-color: inherit;
+        border-color: inherit;
+    }
+}
+
+/* 関数呼び出し・戻り値のスタイル */
+.function-call, .function-return, .error-output {
+    padding: 8px 12px;
+    margin: 4px 0;
+    border-radius: 6px;
+    border-left-width: 4px;
+    border-left-style: solid;
+}
+
+.function-call {
+    background-color: #eef2ff;
+    border-left-color: var(--primary-color);
+}
+
+.function-return {
+    background-color: #f0fdf4;
+    border-left-color: var(--status-success-color);
+}
+
+.error-output {
+    color: var(--status-error-color);
+    font-weight: 600;
+    background: var(--status-error-bg);
+    border-left-color: var(--status-error-color);
+}
+
+/* モーダルウィンドウのスタイル */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: white;
+    padding: 24px;
+    border-radius: 16px;
+    max-width: min(90vw, 800px);
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 32px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    line-height: 1;
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: var(--background-light);
+    color: var(--text-color);
+    transform: rotate(90deg);
+}
+
+.modal-body {
+    overflow: auto;
+    flex: 1;
+}
+
+.modal-body#jsCodeDiv {
+    background: #111827;
+    color: #e5e7eb;
+    padding: 20px;
+    font-family: 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace;
+    white-space: pre-wrap;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.modal-body textarea {
+    width: 100%;
+    min-height: 250px;
+    font-family: 'Fira Code', 'Menlo', 'Monaco', 'Consolas', monospace;
+    border: 1px solid var(--border-color);
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.modal-body textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+.modal-body button {
+    margin-top: 16px;
+    padding: 12px 20px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modal-body button:hover {
+    background: var(--primary-hover);
+    box-shadow: var(--shadow-md);
+}
+
+/* モバイル対応のメディアクエリ */
+@media (max-width: 768px) {
+    #header {
+        height: var(--header-height-mobile);
+        padding: 0 10px;
+        gap: 8px;
+    }
+
+    #mainContainer {
+        height: calc(100% - var(--header-height-mobile));
+        flex-direction: column;
+        padding: 10px;
+        gap: 10px;
+    }
+
+    #paneLeft, #paneRight {
+        flex: 1;
+        min-width: unset;
+        min-height: 200px;
+    }
+
+    .resizer-v { display: none; }
+    .resizer-h { height: 16px; }
+
+    #header button .button-text, .header-divider, #stepCounterDiv {
+        display: none;
+    }
+
+    #header button {
+        padding: 8px;
+        min-height: 40px;
+        min-width: 40px;
+    }
+    #header button svg {
+        width: 22px;
+        height: 22px;
+    }
+
+    #header label { font-size: 13px; }
+
+    #runStatusDiv {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        z-index: 100;
+        box-shadow: var(--shadow-lg);
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+
+    .modal-content {
+        padding: 20px;
+        max-width: 95vw;
+        max-height: 90vh;
+    }
+
+    .pane-header {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+
+    #outputDiv, #stateDiv {
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    .mobile-tabs {
+        display: flex;
+        background-color: var(--background-light);
+        padding: 4px;
+        border-radius: 8px;
+    }
+
+    .tab-button {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        background-color: transparent;
+        color: var(--text-secondary);
+        font-weight: 600;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: background-color 0.2s, color 0.2s;
+    }
+
+    .tab-button.active {
+        background-color: var(--background-panel);
+        color: var(--primary-color);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: flex;
+    }
+}
+
+/* デスクトップビューでの右ペインのレイアウト */
+@media (min-width: 769px) {
+    .mobile-tabs {
+        display: none;
+    }
+    #outputWrapper {
+        display: flex;
+        flex-direction: column;
+        flex-basis: 50%;
+        overflow: hidden;
+    }
+
+    #stateDivWrapper {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        overflow: hidden;
+    }
+}
+
+#stateDiv {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* モバイルビューでは .tab-content が flex を制御 */
+@media (max-width: 768px) {
+    #outputWrapper, #stateDivWrapper {
+        flex-basis: auto; /* モバイルではflex-basisをリセット */
+        flex-grow: 1;
+    }
+}
