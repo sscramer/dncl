@@ -1,7 +1,4 @@
 import pytest
-import http.server
-import socketserver
-import threading
 import os
 from playwright.sync_api import Page, expect
 
@@ -18,30 +15,6 @@ TEST_CASES = [
     ("09_string_reversal", "o,l,l,e,h"),
     ("10_change_making", "8"),
 ]
-
-# --- HTTP Server Fixture ---
-@pytest.fixture(scope="session", autouse=True)
-def http_server():
-    PORT = 8000
-
-    # SimpleHTTPRequestHandler serves files from the current directory
-    Handler = http.server.SimpleHTTPRequestHandler
-
-    socketserver.TCPServer.allow_reuse_address = True
-    httpd = socketserver.TCPServer(("", PORT), Handler)
-
-    print(f"Serving at port {PORT}")
-
-    server_thread = threading.Thread(target=httpd.serve_forever)
-    server_thread.daemon = True
-    server_thread.start()
-
-    yield f"http://localhost:{PORT}"
-
-    print("\nShutting down http server...")
-    httpd.shutdown()
-    httpd.server_close()
-    server_thread.join()
 
 # --- Main Test Function ---
 @pytest.mark.parametrize("program_name, expected_output", TEST_CASES)
