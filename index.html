@@ -3220,8 +3220,24 @@
 
             // --- 初期ブロックの読み込み ---
             try {
-                const startXml = document.getElementById('startBlocks');
-                if (startXml.innerHTML.trim()) {
+                let startXml = document.getElementById('startBlocks');
+
+                // startBlocksが空の場合は、ページ内の他のxmlタグを探す
+                // (ページ下部に追記されたXMLなどを読み込むため)
+                if (!startXml || !startXml.innerHTML.trim()) {
+                    const xmlElements = document.getElementsByTagName('xml');
+                    // 後ろから探す（ページ下部を優先）
+                    for (let i = xmlElements.length - 1; i >= 0; i--) {
+                        const xml = xmlElements[i];
+                        // ツールボックスとstartBlocks自身は除外
+                        if (xml.id !== 'toolbox' && xml.id !== 'startBlocks' && xml.innerHTML.trim()) {
+                            startXml = xml;
+                            break;
+                        }
+                    }
+                }
+
+                if (startXml && startXml.innerHTML.trim()) {
                     Blockly.Xml.domToWorkspace(startXml, workspace);
                 }
             } catch (e) {
