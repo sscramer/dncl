@@ -14,6 +14,7 @@
     <title>DNCL Simulator (v2.5)</title>
     <!-- Blockly Library (v10.4.3) - ビジュアルプログラミングUIを提供 -->
     <script src="https://unpkg.com/blockly@10.4.3/blockly.min.js"></script>
+    <script src="https://unpkg.com/blockly@10.4.3/msg/ja.js"></script>
     <!-- JS-Interpreter - JavaScriptコードをステップ実行するためのライブラリ -->
     <script src="https://unpkg.com/js-interpreter@latest"></script>
     <style>
@@ -1076,18 +1077,22 @@
 
                 // インタプリタの詳細な状態を保存
                 try {
-                    if (myInterpreter.stateStack_) {
-                        snapshot.stateStackLength = myInterpreter.stateStack_.length;
+                    // Use standard property name 'stateStack' instead of internal/minified 'stateStack_'
+                    const stack = myInterpreter.stateStack || myInterpreter.stateStack_;
+                    if (stack) {
+                        snapshot.stateStackLength = stack.length;
                         snapshot.hasState = true;
-                        snapshot.isCompleted = myInterpreter.stateStack_.length === 0;
+                        snapshot.isCompleted = stack.length === 0;
 
                         // 実行状態のディープコピーを作成
-                        if (myInterpreter.stateStack_.length > 0) {
+                        if (stack.length > 0) {
                             snapshot.interpreterState = {
-                                stateStack: deepClone(myInterpreter.stateStack_),
+                                stateStack: deepClone(stack),
                                 globalScope: captureInterpreterScope(myInterpreter.global),
                                 value: myInterpreter.value,
-                                done: myInterpreter.done_
+                                done: myInterpreter.done_,
+                                paused: myInterpreter.paused_,
+                                breakpointNumber: myInterpreter.breakpointNumber
                             };
                         }
                     } else {
@@ -1297,9 +1302,21 @@
                         executionHistory.interpreterStepCounter = snapshot.interpreterStepCount || 0;
                         // stepCounter もスナップショットから復元
                         executionHistory.stepCounter = snapshot.stepNumber || 0;
+
+                        // ステップカウンターの表示を更新
+                        updateStepCounter();
+
                         console.log(`復元後の interpreterStepCounter: ${executionHistory.interpreterStepCounter}`);
                         console.log(`復元後の stepCounter: ${executionHistory.stepCounter}`);
 
+                        // ブレークポイント状態の反映
+                        if (myInterpreter && myInterpreter.paused_ && myInterpreter.breakpointNumber !== undefined) {
+                            const bpNum = myInterpreter.breakpointNumber;
+                            const statusText = (bpNum !== null) ? `ブレークポイント ${bpNum}` : 'ブレークポイント';
+                            setRunStatus(statusText);
+                        } else if (myInterpreter && myInterpreter.done_) {
+                            setRunStatus("プログラム終了", "status-success");
+                        }
 
                         console.log("--- Step Back 完了 ---");
 
@@ -1338,6 +1355,8 @@
                     // その他の状態を復元
                     newInterpreter.value = snapshot.interpreterState.value;
                     newInterpreter.done_ = snapshot.interpreterState.done;
+                    newInterpreter.paused_ = snapshot.interpreterState.paused;
+                    newInterpreter.breakpointNumber = snapshot.interpreterState.breakpointNumber;
 
                     // インタープリターを設定
                     myInterpreter = newInterpreter;
