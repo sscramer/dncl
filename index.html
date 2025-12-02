@@ -1749,6 +1749,191 @@
                 // 1次元配列のアクセス A[i] を safeArrayAccess(A, i) に置換
                 math_input = math_input.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\[\s*([^\]]+?)\s*\]/g, 'safeArrayAccess($1, $2)');
 
+                // 式パーサーの実装：べき乗演算子 (**) を Math.pow に変換する
+                function parseMathExpression(expr) {
+                    let cursor = 0;
+
+                    function peek() {
+                        while (cursor < expr.length && /\s/.test(expr[cursor])) cursor++;
+                        if (cursor >= expr.length) return null;
+                        return expr[cursor];
+                    }
+
+                    function consume(txt) {
+                        peek();
+                        if (expr.startsWith(txt, cursor)) {
+                            cursor += txt.length;
+                            return true;
+                        }
+                        return false;
+                    }
+
+                    function parseExpression() {
+                        // 文字列全体をトップレベルの expression としてパースする。
+                        // JSの演算子優先順位に従う。
+                        return parseBinary(0);
+                    }
+
+                    // 優先順位レベル
+                    // 0: , (comma)
+                    // ...
+                    // 4: + -
+                    // 5: * / %
+                    // 6: ** (Right associative)
+                    // ...
+
+                    // 簡略化：** の変換だけが目的であるため、
+                    // 基本的にJSの構文解析を模倣し、** が出てきたときだけ Math.pow(lhs, rhs) に変形する。
+
+                    function parseBinary(minPrec) {
+                        let left = parseUnary();
+
+                        while (true) {
+                            const op = peekOperator();
+                            if (!op) break;
+
+                            const prec = getPrecedence(op);
+                            if (prec < minPrec) break;
+
+                            consume(op);
+
+                            // Right associativity for **
+                            const nextMinPrec = (op === '**') ? prec : prec + 1;
+                            const right = parseBinary(nextMinPrec);
+
+                            if (op === '**') {
+                                left = `Math.pow(${left}, ${right})`;
+                            } else {
+                                left = `${left} ${op} ${right}`;
+                            }
+                        }
+                        return left;
+                    }
+
+                    function peekOperator() {
+                        peek();
+                        // 2文字演算子
+                        const twoChars = expr.substr(cursor, 2);
+                        if (['**', '==', '!=', '<=', '>=', '&&', '||'].includes(twoChars)) return twoChars;
+
+                        // 1文字演算子
+                        const char = expr[cursor];
+                        if ('+-*/%<>&|^'.includes(char)) return char;
+
+                        return null;
+                    }
+
+                    function getPrecedence(op) {
+                        // JS precedence (approximate for relevant math ops)
+                        if (op === '**') return 14;
+                        if (op === '*' || op === '/' || op === '%') return 13;
+                        if (op === '+' || op === '-') return 12;
+                        if (op === '<' || op === '<=' || op === '>' || op === '>=') return 10;
+                        if (op === '==' || op === '!=') return 9;
+                        if (op === '&&') return 5;
+                        if (op === '||') return 4;
+                        return 0;
+                    }
+
+                    function parseUnary() {
+                        peek();
+                        if (consume('+')) return '+' + parseUnary();
+                        if (consume('-')) return '-' + parseUnary();
+                        if (consume('!')) return '!' + parseUnary();
+                        return parseAtom();
+                    }
+
+                    function parseAtom() {
+                        peek();
+                        let atom = '';
+
+                        if (consume('(')) {
+                            const exprVal = parseBinary(0);
+                            consume(')');
+                            atom = `(${exprVal})`;
+                        } else {
+                            // Identifier
+                            const idMatch = expr.substr(cursor).match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/);
+                            if (idMatch) {
+                                atom = idMatch[0];
+                                cursor += idMatch[0].length;
+                            } else {
+                                // Number
+                                const numMatch = expr.substr(cursor).match(/^[0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?/i);
+                                if (numMatch) {
+                                    atom = numMatch[0];
+                                    cursor += numMatch[0].length;
+                                } else {
+                                    // String
+                                    const strMatch = expr.substr(cursor).match(/^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'/);
+                                    if (strMatch) {
+                                        atom = strMatch[0];
+                                        cursor += strMatch[0].length;
+                                    } else {
+                                        // Fallback: Just consume one char to avoid infinite loop if unknown char
+                                        if (cursor < expr.length) {
+                                            atom = expr[cursor];
+                                            cursor++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Postfix operations: .prop, (args), [index]
+                        while (true) {
+                            peek();
+                            if (consume('.')) {
+                                const idMatch = expr.substr(cursor).match(/^[a-zA-Z_$][a-zA-Z0-9_$]*/);
+                                if (idMatch) {
+                                    atom += '.' + idMatch[0];
+                                    cursor += idMatch[0].length;
+                                } else {
+                                    // Error or mismatch, stop postfix parsing
+                                    break;
+                                }
+                            } else if (consume('(')) {
+                                const args = [];
+                                if (peek() !== ')') {
+                                    do {
+                                        args.push(parseBinary(0));
+                                    } while (consume(','));
+                                }
+                                consume(')');
+                                atom += `(${args.join(', ')})`;
+                            } else if (consume('[')) {
+                                const idx = parseBinary(0);
+                                consume(']');
+                                atom += `[${idx}]`;
+                            } else {
+                                break;
+                            }
+                        }
+                        return atom;
+                    }
+
+                    try {
+                        const result = parseExpression();
+                        // If anything remains, append it (safeguard)
+                         if (cursor < expr.length) {
+                            return result + expr.substr(cursor);
+                         }
+                         return result;
+                    } catch (e) {
+                        console.error("Parse error", e);
+                        return expr; // Fallback
+                    }
+                }
+
+                try {
+                    // Try parsing. If it contains syntax we don't handle well, we might fallback or output partial.
+                    // To be safe, we only use the parsed result if we consumed most of the string?
+                    // Or just trust our parser covers standard JS math expressions.
+                    math_input = parseMathExpression(math_input);
+                } catch (e) {
+                    console.warn("Math parse failed, using original", e);
+                }
+
                 // ワークスペース上の全ての変数を取得
                 const allVariables = workspace.getAllVariables();
                 const varNames = allVariables.map(v => v.name);
