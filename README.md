@@ -9,8 +9,6 @@ GitHub Pages で公開されています。
 
 <https://sscramer.github.io/dncl/>
 
-![DNCL Simulator screenshot](screenshot.png)
-
 ## 特長
 
 - **インストール不要**: GitHub Pages 上でそのまま利用できます。
